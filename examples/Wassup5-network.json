@@ -1,0 +1,84 @@
+{
+  "meters_per_pixel": 0.73,
+  "driving_side": "right",
+  "spawn_vehicles_per_second_per_marked_node": 0.06,
+  "roads": [
+    {
+      "name": "NW inbound",
+      "from_node": 2,
+      "to_node": 0,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "NW outbound",
+      "from_node": 0,
+      "to_node": 3,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "NE outbound",
+      "from_node": 0,
+      "to_node": 1,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "NE outbound boundary",
+      "from_node": 1,
+      "to_node": 4,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "NE inbound",
+      "from_node": 5,
+      "to_node": 0,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "North spur, two-way",
+      "from_node": 6,
+      "to_node": 1,
+      "two_way": true,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "SW outbound",
+      "from_node": 0,
+      "to_node": 7,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "SW inbound",
+      "from_node": 8,
+      "to_node": 0,
+      "two_way": false,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "West, two-way",
+      "from_node": 9,
+      "to_node": 0,
+      "two_way": true,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "SE bottom, two-way",
+      "from_node": 10,
+      "to_node": 0,
+      "two_way": true,
+      "lanes_per_direction": 2
+    },
+    {
+      "name": "SE east, two-way",
+      "from_node": 11,
+      "to_node": 0,
+      "two_way": true,
+      "lanes_per_direction": 2
+    }
+  ]
+}
