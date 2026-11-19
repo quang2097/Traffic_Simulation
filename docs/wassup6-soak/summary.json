@@ -1,0 +1,356 @@
+{
+  "before": [
+    {
+      "seed": 7,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "247",
+        "completed": "147",
+        "active": "100",
+        "junction_entries": "153",
+        "mean_stop": "298.581",
+        "max_stop": "885.125",
+        "free_max_stop": "737.483",
+        "distinct_stalls": "100",
+        "distinct_free_stalls": "1",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 0,
+      "max_vehicle_stop_clock_seen_in_junction_900": 737.483,
+      "drain_tested": false,
+      "drain_seconds": null,
+      "completed_after_drain": null,
+      "admitted": 247,
+      "remaining_after_drain": null,
+      "minimum_sampled_clearance": 0.122983
+    },
+    {
+      "seed": 42,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "441",
+        "completed": "341",
+        "active": "100",
+        "junction_entries": "346",
+        "mean_stop": "144.623",
+        "max_stop": "876.667",
+        "free_max_stop": "0",
+        "distinct_stalls": "99",
+        "distinct_free_stalls": "0",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 10,
+      "max_vehicle_stop_clock_seen_in_junction_900": 3.49167,
+      "drain_tested": false,
+      "drain_seconds": null,
+      "completed_after_drain": null,
+      "admitted": 441,
+      "remaining_after_drain": null,
+      "minimum_sampled_clearance": 0.148247
+    },
+    {
+      "seed": 123,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "264",
+        "completed": "164",
+        "active": "100",
+        "junction_entries": "167",
+        "mean_stop": "269.428",
+        "max_stop": "889.842",
+        "free_max_stop": "722.167",
+        "distinct_stalls": "114",
+        "distinct_free_stalls": "3",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 0,
+      "max_vehicle_stop_clock_seen_in_junction_900": 722.167,
+      "drain_tested": false,
+      "drain_seconds": null,
+      "completed_after_drain": null,
+      "admitted": 264,
+      "remaining_after_drain": null,
+      "minimum_sampled_clearance": 0.122148
+    },
+    {
+      "seed": 256,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "201",
+        "completed": "101",
+        "active": "100",
+        "junction_entries": "103",
+        "mean_stop": "392.791",
+        "max_stop": "863.992",
+        "free_max_stop": "812.117",
+        "distinct_stalls": "100",
+        "distinct_free_stalls": "2",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 0,
+      "max_vehicle_stop_clock_seen_in_junction_900": 812.117,
+      "drain_tested": false,
+      "drain_seconds": null,
+      "completed_after_drain": null,
+      "admitted": 201,
+      "remaining_after_drain": null,
+      "minimum_sampled_clearance": 0.151176
+    },
+    {
+      "seed": 1024,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "201",
+        "completed": "101",
+        "active": "100",
+        "junction_entries": "102",
+        "mean_stop": "382.2",
+        "max_stop": "885.258",
+        "free_max_stop": "861.683",
+        "distinct_stalls": "100",
+        "distinct_free_stalls": "1",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 0,
+      "max_vehicle_stop_clock_seen_in_junction_900": 861.683,
+      "drain_tested": false,
+      "drain_seconds": null,
+      "completed_after_drain": null,
+      "admitted": 201,
+      "remaining_after_drain": null,
+      "minimum_sampled_clearance": 0.153832
+    }
+  ],
+  "after": [
+    {
+      "seed": 7,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "823",
+        "completed": "738",
+        "active": "85",
+        "junction_entries": "747",
+        "mean_stop": "40.9491",
+        "max_stop": "483.117",
+        "free_max_stop": "0",
+        "distinct_stalls": "55",
+        "distinct_free_stalls": "2",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 94,
+      "max_vehicle_stop_clock_seen_in_junction_900": 37.525,
+      "drain_tested": true,
+      "drain_seconds": 154.29,
+      "completed_after_drain": 823,
+      "admitted": 823,
+      "remaining_after_drain": 0,
+      "minimum_sampled_clearance": 0.108857
+    },
+    {
+      "seed": 42,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "802",
+        "completed": "703",
+        "active": "99",
+        "junction_entries": "715",
+        "mean_stop": "45.4675",
+        "max_stop": "253.817",
+        "free_max_stop": "0",
+        "distinct_stalls": "40",
+        "distinct_free_stalls": "2",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 87,
+      "max_vehicle_stop_clock_seen_in_junction_900": 38.3333,
+      "drain_tested": true,
+      "drain_seconds": 157.32,
+      "completed_after_drain": 802,
+      "admitted": 802,
+      "remaining_after_drain": 0,
+      "minimum_sampled_clearance": 0.108748
+    },
+    {
+      "seed": 123,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "794",
+        "completed": "702",
+        "active": "92",
+        "junction_entries": "713",
+        "mean_stop": "45.7892",
+        "max_stop": "470.967",
+        "free_max_stop": "0",
+        "distinct_stalls": "71",
+        "distinct_free_stalls": "1",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 94,
+      "max_vehicle_stop_clock_seen_in_junction_900": 81.55,
+      "drain_tested": true,
+      "drain_seconds": 240.0,
+      "completed_after_drain": 766,
+      "admitted": 794,
+      "remaining_after_drain": 28,
+      "minimum_sampled_clearance": 0.1221482702583093
+    },
+    {
+      "seed": 256,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "785",
+        "completed": "713",
+        "active": "72",
+        "junction_entries": "726",
+        "mean_stop": "42.8344",
+        "max_stop": "280.5",
+        "free_max_stop": "0",
+        "distinct_stalls": "50",
+        "distinct_free_stalls": "0",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 89,
+      "max_vehicle_stop_clock_seen_in_junction_900": 24.225,
+      "drain_tested": true,
+      "drain_seconds": 164.67,
+      "completed_after_drain": 785,
+      "admitted": 785,
+      "remaining_after_drain": 0,
+      "minimum_sampled_clearance": 0.120177
+    },
+    {
+      "seed": 1024,
+      "at_900": {
+        "seconds": "900",
+        "offered": "3294",
+        "inserted": "820",
+        "completed": "728",
+        "active": "92",
+        "junction_entries": "738",
+        "mean_stop": "40.4066",
+        "max_stop": "426.142",
+        "free_max_stop": "0",
+        "distinct_stalls": "42",
+        "distinct_free_stalls": "1",
+        "mask_violators": "0",
+        "clearance_pairs": "0",
+        "deleted": "0"
+      },
+      "audits": {
+        "mask_violators": 0,
+        "clearance_pairs": 0,
+        "deleted": 0
+      },
+      "completed_last_120": 99,
+      "max_vehicle_stop_clock_seen_in_junction_900": 40.8583,
+      "drain_tested": true,
+      "drain_seconds": 240.0,
+      "completed_after_drain": 797,
+      "admitted": 820,
+      "remaining_after_drain": 23,
+      "minimum_sampled_clearance": 0.15391974637229217
+    }
+  ],
+  "original_input_hashes_verified": {
+    "C:\\Users\\Uokbr\\Downloads\\Wassup6.png": true,
+    "C:\\Users\\Uokbr\\Downloads\\Node_network_2.nodes": true,
+    "C:\\Users\\Uokbr\\Downloads\\Node_network_2.nodes.signals": true
+  },
+  "repaired_source_sha256": {
+    "Simulation.cpp": "0cfffcd18b4ed7aa346f84c98ed823169ca6b918da04aded09e96b4de173b2ac",
+    "HybridTraffic.cpp": "ad14c53efd181248ae2ac5068854e101e4e80e5e77ad817147a1b7e459287d63",
+    "TrafficFlow.cpp": "29e0e0d2cb81146b8da7c8219c5d396e5ca4619a7e4885441744e4c7b8001c5e",
+    "Lanes.cpp": "9c60356abafa9158f0a419d8ee5d6f4c034072a60c464e62370a8bd950100bba",
+    "Geometry.cpp": "bda617fe59da700a541d3bb9e1ad9a6b7f6c705c8bb6f3c448fe630870e68daf",
+    "SignalQueue.cpp": "aa3f5aadf2e59d2f645a085b9db999e6632a3dc187ec7a9b3459bde23fdbfab7",
+    "SignalApproach.cpp": "a2b3494aab521abdfb2e17d8f6c2c9badf1af7d493fc39edc4ff70ca278acf67"
+  },
+  "retained_reference_source_sha256": {
+    "Simulation.cpp": "97758bb3db41eea6a44926aae555a58314f0785012aa0bc108ef80fae83ccc4d",
+    "HybridTraffic.cpp": "9db963032e1bfe51adffd99347e92454c60a4c54b06c4a2984e8922e03ed18e5",
+    "TrafficFlow.cpp": "0fa4d65f48dfd1c097bfc384a60be631072d7c7443688826092dcc797f171f36",
+    "Lanes.cpp": "5a58879dcb2921166d71dc83596f9283e7a3c6678d19ae4ae84aefa5015a7a7d",
+    "Geometry.cpp": "e65295227a1b39f2d569a783708de3ca1892b08953f12b3f83bf7f1cba3bc064",
+    "SignalQueue.cpp": "b3a2b75bc0f48e7635ad0ffe075c302d984be51e12ce9685cbf9d58f0c02e532",
+    "SignalApproach.cpp": "a36bc18d1e2f7843ded943fba25f780da3d68c223c1b95f2b1f9b90600696fc1"
+  },
+  "executable_sha256": "7260f4634b690014342a0820053c752f75e0d2e70e03c8eb3feeddb37fbfacb0",
+  "soak_executable_sha256": "55b35e48286832e4af77b1c0c257056bd2f230fcbd3f4033989f1e587cb07610",
+  "runner_sha256": "2780a8ecaf6fa41b67e393877b94d46d870b1cc0becf0934af154780b1ddeb18",
+  "test_model": "Native C++ engine, fixed 120 Hz, one collision worker",
+  "audit": "1 Hz footprint/mask, preferred clearance and zero-gap SAT overlap checks",
+  "comparison_build": "Measured repair build, before final lane-edge follow-up",
+  "final_followup_validation": "followup-validation.json"
+}

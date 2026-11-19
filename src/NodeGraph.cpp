@@ -33,6 +33,26 @@ void NodeGraph::connect(int from,int to,double width,double speed) {
     if(!std::isfinite(width) || width<.5 || width>15 || !std::isfinite(speed) || speed<.1 || speed>50) throw std::invalid_argument("Invalid connection settings");
     if(pathConnection(from,to)<0) connections.push_back({from,to,width,speed,1});
 }
+int NodeGraph::splitRoad(int road,Vec2 position) {
+    if(road<0 || road>=static_cast<int>(connections.size())) throw std::invalid_argument("Choose a road");
+    auto original=connections[road]; auto points=original.shape;
+    if(points.empty()) points={nodes[original.from].position,nodes[original.to].position};
+    std::vector<double> widths=original.shapeWidths;
+    if(widths.empty()) { double total=0,at=0; for(std::size_t i=1;i<points.size();++i) total+=length(points[i]-points[i-1]);
+        for(std::size_t i=0;i<points.size();++i) { if(i) at+=length(points[i]-points[i-1]); widths.push_back(original.width+(original.endWidth>0?original.endWidth-original.width:0)*at/std::max(.001,total)); } }
+    double best=1e100,tBest=0; std::size_t segment=1; Vec2 split;
+    for(std::size_t i=1;i<points.size();++i) { auto d=points[i]-points[i-1]; double t=std::clamp(((position.x-points[i-1].x)*d.x+(position.y-points[i-1].y)*d.y)/std::max(1e-9,d.x*d.x+d.y*d.y),0.,1.); auto q=points[i-1]+d*t; double gap=length(position-q); if(gap<best) {best=gap;split=q;segment=i;tBest=t;} }
+    if(length(split-points.front())<.1) return original.from;
+    if(length(split-points.back())<.1) return original.to;
+    int node=addNode(split); if(node==original.from || node==original.to) return node;
+    double width=widths[segment-1]+(widths[segment]-widths[segment-1])*tBest;
+    auto first=original,second=original; first.to=node; second.from=node;
+    first.shape.assign(points.begin(),points.begin()+segment); first.shapeWidths.assign(widths.begin(),widths.begin()+segment);
+    second.shape.assign(points.begin()+segment,points.end()); second.shapeWidths.assign(widths.begin()+segment,widths.end());
+    if(length(first.shape.back()-split)<.05) { first.shape.back()=split; first.shapeWidths.back()=width; } else {first.shape.push_back(split);first.shapeWidths.push_back(width);}
+    if(length(second.shape.front()-split)<.05) {second.shape.front()=split;second.shapeWidths.front()=width;} else {second.shape.insert(second.shape.begin(),split);second.shapeWidths.insert(second.shapeWidths.begin(),width);}
+    connections[road]=first; connections.push_back(second); return node;
+}
 void NodeGraph::sever(int from,int to) {
     int id=pathConnection(from,to);
     if(id>=0) { connections.erase(connections.begin()+id); return; }
@@ -50,7 +70,7 @@ bool NodeGraph::extendSelection(std::vector<int>& path,int node) const {
     path.push_back(node); return true;
 }
 std::vector<DirectedLane> NodeGraph::lanes() const {
-    if(std::any_of(connections.begin(),connections.end(),[](const auto& e){return e.roadType!=0;}) || std::any_of(nodes.begin(),nodes.end(),[](const auto& n){return n.openRadius>0;})) return compileRoads(*this).lanes;
+    if(std::any_of(connections.begin(),connections.end(),[](const auto& e){return e.roadType!=0;}) || std::any_of(nodes.begin(),nodes.end(),[](const auto& n){return n.openRadius>0 || n.allowUTurn;})) return compileRoads(*this).lanes;
     std::vector<DirectedLane> result;
     for(const auto& edge:connections) {
         if(edge.from<0 || edge.to<0 || edge.from>=static_cast<int>(nodes.size()) || edge.to>=static_cast<int>(nodes.size()) || edge.from==edge.to) throw std::invalid_argument("Invalid node connection");
@@ -84,8 +104,8 @@ NodeGraph NodeGraph::fromLanes(const std::vector<DirectedLane>& lanes) {
     return graph;
 }
 void NodeGraph::save(const std::string& file) const {
-    std::ofstream out(file); out<<std::setprecision(17)<<"TRAFFIC_NODES 6 "<<nodes.size()<<' '<<connections.size()<<' '<<explicitDestinations<<'\n';
-    for(const auto& n:nodes) out<<n.position.x<<' '<<n.position.y<<' '<<n.spawn<<' '<<n.rate<<' '<<n.braking<<' '<<n.signal<<' '<<n.openRadius<<' '<<n.destination<<' '<<n.turn<<' '<<n.turnRadius<<' '<<n.excludeOwnDestination<<'\n';
+    std::ofstream out(file); out<<std::setprecision(17)<<"TRAFFIC_NODES 7 "<<nodes.size()<<' '<<connections.size()<<' '<<explicitDestinations<<'\n';
+    for(const auto& n:nodes) out<<n.position.x<<' '<<n.position.y<<' '<<n.spawn<<' '<<n.rate<<' '<<n.braking<<' '<<n.signal<<' '<<n.openRadius<<' '<<n.destination<<' '<<n.turn<<' '<<n.turnRadius<<' '<<n.excludeOwnDestination<<' '<<n.allowUTurn<<'\n';
     for(const auto& e:connections) {
         out<<e.from<<' '<<e.to<<' '<<e.width<<' '<<e.speed<<' '<<e.smoothing<<' '<<e.roadType<<' '<<e.laneCount<<' '<<e.shape.size()<<' '<<e.reverseLaneCount<<' '<<e.lateralOffset<<' '<<e.endWidth<<' '<<e.forwardWidths.size()<<' '<<e.reverseWidths.size()<<' '<<e.shapeWidths.size()<<'\n';
         for(auto p:e.shape) out<<p.x<<' '<<p.y<<'\n';
@@ -97,7 +117,7 @@ void NodeGraph::save(const std::string& file) const {
 }
 NodeGraph NodeGraph::load(const std::string& file) {
     std::ifstream in(file); std::string magic; int version; std::size_t n,e;
-    if(!(in>>magic>>version>>n>>e) || magic!="TRAFFIC_NODES" || version<1 || version>6 || n>200000 || e>200000) throw std::runtime_error("Invalid node network");
+    if(!(in>>magic>>version>>n>>e) || magic!="TRAFFIC_NODES" || version<1 || version>7 || n>200000 || e>200000) throw std::runtime_error("Invalid node network");
     NodeGraph graph; graph.nodes.resize(n);
     if(version>=4 && !(in>>graph.explicitDestinations)) throw std::runtime_error("Invalid destination policy");
     for(auto& node:graph.nodes) {
@@ -107,6 +127,7 @@ NodeGraph NodeGraph::load(const std::string& file) {
         if(version>=4 && !(in>>node.destination)) throw std::runtime_error("Invalid destination node");
         if(version>=5 && (!(in>>node.turn>>node.turnRadius) || !std::isfinite(node.turnRadius) || node.turnRadius<.5 || node.turnRadius>500)) throw std::runtime_error("Invalid turn-node settings");
         if(version>=6 && !(in>>node.excludeOwnDestination)) throw std::runtime_error("Invalid spawn destination policy");
+        if(version>=7 && !(in>>node.allowUTurn)) throw std::runtime_error("Invalid U-turn policy");
     }
     for(std::size_t i=0;i<e;++i) {
         RoadConnection edge;

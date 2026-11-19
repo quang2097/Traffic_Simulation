@@ -1,0 +1,27 @@
+[
+  {
+    "seed": 7,
+    "matching_snapshots": 8,
+    "differences": []
+  },
+  {
+    "seed": 42,
+    "matching_snapshots": 10,
+    "differences": []
+  },
+  {
+    "seed": 123,
+    "matching_snapshots": 11,
+    "differences": []
+  },
+  {
+    "seed": 256,
+    "matching_snapshots": 8,
+    "differences": []
+  },
+  {
+    "seed": 1024,
+    "matching_snapshots": 8,
+    "differences": []
+  }
+]

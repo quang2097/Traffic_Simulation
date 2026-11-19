@@ -1,0 +1,20 @@
+{
+  "C:\\Users\\Uokbr\\Downloads\\Wassup6.png": "a4c9a089bb8be7601e8b7468774b6015b3ff2f18a30f8c44276851a25405de4a",
+  "C:\\Users\\Uokbr\\Downloads\\Node_network_2.nodes": "4ce24494c8ef3ef8ed5e19a4ae73ede33a0efb8ba24577e26d7d7d4b7a724aad",
+  "C:\\Users\\Uokbr\\Downloads\\Node_network_2.nodes.signals": "e81e1726f16a9f2b84927188cad47ab4bff379ebb5691542c1758959c86d1e84",
+  "scale_m_per_pixel": 0.074,
+  "seeds": [
+    7,
+    42,
+    123,
+    256,
+    1024
+  ],
+  "seconds_per_seed": 900,
+  "physics_hz": 120,
+  "maximum_active": 100,
+  "vehicle_deletion": false,
+  "vehicle_mix": "vietnameseCityProfiles",
+  "signals": 6,
+  "audit_interval_seconds": 1
+}

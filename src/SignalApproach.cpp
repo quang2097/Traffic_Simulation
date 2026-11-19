@@ -44,6 +44,14 @@ int Simulation::closestStoppingLight(const Entity& e,double* routeDistance,Vec2*
     }
     int selected=-1; double nearest=std::numeric_limits<double>::infinity(); Vec2 point;
     auto route=remainingRoute(e);
+    // Look through the lane's temporary endpoint to its committed crossing,
+    // so native vehicles brake before the light without acquiring RTS slots.
+    if(flow_.predictiveJunctions && !e.networkRoute.empty() && !e.inOpenJunction &&
+       e.networkStage+1<e.junctionPlans.size()) {
+        const auto& next=e.junctionPlans[e.networkStage+1];
+        for(std::size_t i=0;i<next.points.size();++i) if(length(next.points[i]-route.back().center)>1e-8)
+            route.push_back({next.points[i],next.headings[i],e.length,e.width});
+    }
     for(std::size_t k=0;k<lights_.size();++k) {
         const auto& light=lights_[k];
         if(!lightStops(light,e) || geometry::intersectsLine(corners(e.footprint()),light.a,light.b)) continue;

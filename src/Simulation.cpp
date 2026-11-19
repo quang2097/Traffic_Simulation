@@ -2,6 +2,7 @@
 #include "traffic/Parallel.hpp"
 #include "traffic/Geometry.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <queue>
@@ -173,6 +174,20 @@ void Simulation::setTrafficLights(std::vector<TrafficLight> lights) {
         validate(light.yellowSeconds,0,3600,"Invalid yellow duration");
         validate(light.redSeconds,.1,3600,"Invalid red duration");
         validate(light.offsetSeconds,0,10800,"Invalid phase offset");
+        validate(light.queueWindowSeconds,.1,3600,"Queue window must be 0.1-3600 seconds");
+        validate(light.queueThresholdPercent,0,100,"Queue threshold must be 0-100 percent");
+        std::uint64_t nextDetector=1;
+        for(const auto& detector:light.queueDetectors) nextDetector=std::max(nextDetector,detector.id+1);
+        std::vector<std::uint64_t> detectorIds;
+        for(auto& detector:light.queueDetectors) {
+            if(!detector.id) detector.id=nextDetector++;
+            if(std::find(detectorIds.begin(),detectorIds.end(),detector.id)!=detectorIds.end())
+                throw std::invalid_argument("Queue detectors must have distinct identities within a light");
+            detectorIds.push_back(detector.id);
+            if(!finite(detector.a) || !finite(detector.b) || length(detector.b-detector.a)<.1 ||
+                !map_.contains(map_.pixel(detector.a)) || !map_.contains(map_.pixel(detector.b)))
+                throw std::invalid_argument("Queue detector endpoints must be inside the map and at least 0.1 m apart");
+        }
         if(light.permissive && (!finite(light.allowedA) || !finite(light.allowedB) || length(light.allowedB-light.allowedA)<.1 ||
            !map_.contains(map_.pixel(light.allowedA)) || !map_.contains(map_.pixel(light.allowedB))))
             throw std::invalid_argument("Linked exit must have valid endpoints inside the map");
@@ -184,6 +199,7 @@ void Simulation::setTrafficLights(std::vector<TrafficLight> lights) {
     }
     for(auto& e:entities_) e.signalRetryAfter=seconds_;
     lights_=std::move(lights);
+    reconcileQueueDetectors();
 }
 bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity& e,bool traffic,bool reservations) const {
     double pad;
@@ -194,17 +210,21 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
     auto clear=[&](const Entity& other) {
         if(other.id==e.id) return true;
         double gap=std::min(e.preferredDistance,other.preferredDistance);
-        if(flow_.sublanes && !e.networkRoute.empty() && !other.networkRoute.empty()) {
-            Vec2 forward{std::cos(e.heading),std::sin(e.heading)};
-            auto delta=other.center-e.center;
-            if(std::abs(delta.x*forward.x+delta.y*forward.y)<(e.length+other.length)*.5) gap=std::max(gap,flow_.lateralGap);
-        }
+        // Desired lateral gaps guide placement; motion enforces the preferred minimum.
         bool sameQueue=planningSignalBatch_ && planningSignalLight_>=0 && other.signalLight==planningSignalLight_ &&
             other.signalForward.x*planningSignalForward_.x+other.signalForward.y*planningSignalForward_.y>.5;
         if(planningSignalBatch_ && planningSignalLight_>=0 && other.signalLight>=0 &&
            geometry::closerThan(sweep,corners({other.signalTarget,other.signalStopHeading,other.length,other.width}),gap+pad+.04)) return false;
         if(sameQueue && other.next<other.path.size() && length(other.signalTarget-other.center)>.25) return true;
-        if(flow_.sublanes && other.reservesSublaneGap()) for(const auto& piece:other.sublaneReservation)
+        Vec2 claimForward{std::cos(other.heading),std::sin(other.heading)};
+        auto beforeClaim=from.center-other.center,afterClaim=to.center-other.center;
+        double ahead=beforeClaim.x*claimForward.x+beforeClaim.y*claimForward.y;
+        bool clearingAhead=(ahead>.02 || (std::abs(ahead)<=.02 && e.id<other.id)) &&
+            std::cos(from.heading-other.heading)>.95 &&
+            afterClaim.x*claimForward.x+afterClaim.y*claimForward.y>ahead+1e-10;
+        // A following merge must not reserve the leader's escape. Physical
+        // body clearance still applies below; only the future claim is ignored.
+        if(flow_.sublanes && !clearingAhead && !(e.cooperativeRecovery && !e.laneRoute.empty()) && other.reservesSublaneGap()) for(const auto& piece:other.sublaneReservation)
             if(piece.end>=other.next && geometry::violatesClearance(sweep,piece.sweep,gap+pad+piece.padding)) return false;
         double bound=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+gap+length(to.center-from.center)+pad;
         if(length(from.center-other.center)<=bound && geometry::violatesClearance(sweep,corners(other.footprint()),gap+pad) &&
@@ -264,7 +284,32 @@ bool Simulation::installPath(Entity& e,std::vector<Vec2> points,double initialCo
         for(int id:e.laneRoute) if(length(points[i]-lanes_[id].points.back())<1e-5) { smoothing[i]=lanes_[id].turnSmoothing; break; }
     }
     auto motion=curvePath(map_,e.footprint(),points,initialConnectorLimit,smoothing);
-    if(motion.points.empty()) return false;
+    // Reject a lane trajectory before committing to it, rather than discovering
+    // an impossible body rotation only after a queue has formed behind it.
+    auto insideLane=[&](const MotionPath& trial) {
+        if(trial.points.empty()) return false;
+        if(e.networkRoute.empty() || e.inOpenJunction) return true;
+        for(std::size_t i=1;i<trial.points.size();++i) {
+            double distance=length(trial.points[i]-trial.points[i-1]);
+            double angle=angleDelta(trial.headings[i-1],trial.headings[i]);
+            int samples=std::max(1,static_cast<int>(std::ceil(std::max(distance/.25,std::abs(angle)/.02))));
+            for(int k=0;k<=samples;++k) {
+                double f=static_cast<double>(k)/samples;
+                Footprint pose{trial.points[i-1]+(trial.points[i]-trial.points[i-1])*f,
+                    trial.headings[i-1]+angle*f,e.length,e.width};
+                if(!fitsLaneRoute(pose,e)) return false;
+            }
+        }
+        return true;
+    };
+    if(!insideLane(motion) && !e.networkRoute.empty() && !e.inOpenJunction) {
+        for(double factor:{.5,2.,.25,4.}) {
+            auto adjusted=smoothing;for(auto& value:adjusted)value*=factor;
+            auto trial=curvePath(map_,e.footprint(),points,initialConnectorLimit*factor,adjusted);
+            if(insideLane(trial)){motion=std::move(trial);break;}
+        }
+    }
+    if(!insideLane(motion)) return false;
     e.path=std::move(motion.points); e.pathHeadings=std::move(motion.headings); e.maneuvers=std::move(motion.turns);
     e.next=1; e.segmentProgress=0; e.reservedTurn.clear(); e.reservedApproach.clear(); e.reservationEnd=0;
     e.usingLocalDetour=false; e.following=false;
@@ -554,12 +599,122 @@ void Simulation::advance(double dt) {
             e.waitingForLight=blockedByLight(e.footprint(),probe,e);
         }
     }
-    for(auto& e:entities_) if(e.cooperativeRecovery && e.next>e.reservationEnd) e.cooperativeRecovery=false;
+    // Finish or expire a bounded clearance prefix. A stalled recovery must
+    // not reserve the neighborhood indefinitely after traffic changes.
+    for(auto& e:entities_) if(e.cooperativeRecovery) {
+        if(e.next>e.reservationEnd) e.cooperativeRecovery=false;
+        else if(!e.networkRoute.empty() && !e.laneRoute.empty() && e.currentStopSeconds>2 && seconds_>=e.trafficRecoveryAfter) {
+            e.cooperativeRecovery=false;e.sublaneReservation.clear();e.reservationEnd=0;
+        }
+    }
+
     planSignalQueues();
     updateTurnNegotiation();
     if(!recoveryPreview_) planStoppedTraffic();
     // A recovery rollout validates the proposed plans. Incidental RTS searches
     // would both waste work and credit routes that are not part of the commit.
+    // Resolve a lane-side contact by first translating a short distance at
+    // the current heading. Turning immediately can pinch a legally packed
+    // neighbor even though there is clear road in front. No pose is moved by
+    // planning; the ordinary swept movement checks execute this prefix.
+    if(flow_.predictiveJunctions && trafficRecoverySettings_.enabled && !recoveryPreview_) {
+        for(auto& e:entities_) {
+            if(e.inOpenJunction || e.networkRoute.empty() || e.laneRoute.empty() || e.waitingForJunction ||
+               e.turnExitBlocked || e.signalLight!=-1 || e.reversing ||
+               e.cooperativeRecovery || e.currentStopSeconds<2 || e.desiredSpeed<.1 ||
+               seconds_<e.trafficRecoveryAfter || e.next>=e.path.size()) continue;
+            if(stopReason(e)==StopReason::Signal) continue;
+            e.trafficRecoveryAfter=seconds_+.5;
+            bool nearbyRecovery=false;
+            for(const auto& other:entities_) if(other.id!=e.id && other.cooperativeRecovery && !other.laneRoute.empty() && length(other.center-e.center)<12) nearbyRecovery=true;
+            if(nearbyRecovery) continue;
+            auto started=std::chrono::steady_clock::now();
+            auto repair=[&]()->bool {
+                if(!fitsLaneRoute(e.footprint(),e)) {e.junctionStatus="Recovery: current body outside lane envelope";return false;}
+                Vec2 forward{std::cos(e.heading),std::sin(e.heading)};
+                double total=0;Vec2 last=e.center;
+                for(std::size_t i=e.next;i<e.path.size();++i){total+=length(e.path[i]-last);last=e.path[i];}
+                double wanted=std::min(std::max(3.,e.length*3),std::max(.5,total*.6));
+                double walked=0;last=e.center;std::size_t join=e.next;
+                for(;join<e.path.size();++join) {walked+=length(e.path[join]-last);last=e.path[join];if(walked>=wanted && (last.x-e.center.x)*forward.x+(last.y-e.center.y)*forward.y>.5) break;}
+                if(join>=e.path.size()) {
+                    join=e.path.size()-1;
+                    if((e.path[join].x-e.center.x)*forward.x+(e.path[join].y-e.center.y)*forward.y<.05) {
+                        e.junctionStatus="Recovery: no forward join before route end";return false;
+                    }
+                }
+                // A small reverse prefix creates steering room at a lane edge.
+                // It is committed only if its entire swept body/gap is clear.
+                for(bool recenter:{false,true}) for(double distance:{.35,.15,.6,-.05,-.15,-.35}) {
+                    Entity candidate=e; candidate.cooperativeRecovery=true;
+                    auto from=e.footprint(),nudge=from;nudge.center=from.center+forward*distance;
+                    if((e.path[join].x-nudge.center.x)*forward.x+(e.path[join].y-nudge.center.y)*forward.y<.1)continue;
+                    if(blockedByLight(from,nudge,candidate)) {e.junctionStatus="Recovery: signal blocks short step";continue;}
+                    if(!feasible(from,nudge,candidate,true,false)) {e.junctionStatus=feasible(from,nudge,candidate,false,false)?"Recovery: short step blocked by traffic":"Recovery: short step leaves lane or mask";continue;}
+                    candidate.path={e.center,nudge.center};candidate.pathHeadings={e.heading,e.heading};candidate.maneuvers.clear();
+                    if(recenter) {
+                        // A cached lateral detour may aim outside a narrowing
+                        // road. Rebuild toward its centre instead of repeatedly
+                        // trying to rejoin the same unusable lateral tail.
+                        Entity continuation=e;continuation.center=nudge.center;
+                        continuation.lateralOffset=0;continuation.admissionPlan={};
+                        if(!installNetworkStage(continuation,e.networkStage))continue;
+                        candidate.goal=continuation.goal;candidate.lateralOffset=0;
+                        candidate.path.insert(candidate.path.end(),continuation.path.begin()+1,continuation.path.end());
+                        candidate.pathHeadings.insert(candidate.pathHeadings.end(),continuation.pathHeadings.begin()+1,continuation.pathHeadings.end());
+                    } else {
+                        auto end=e.path[join];double h=e.pathHeadings[join];Vec2 out{std::cos(h),std::sin(h)};
+                        double handle=length(end-nudge.center)*.35;auto b=nudge.center+forward*handle,c=end-out*handle;
+                        auto previous=nudge;bool valid=true;
+                        int count=std::max(30,static_cast<int>(std::ceil((length(b-nudge.center)+length(c-b)+length(end-c))/.1)));
+                        for(int i=1;i<=count && valid;++i) {
+                            double t=static_cast<double>(i)/count,u=1-t;
+                            auto point=nudge.center*(u*u*u)+b*(3*u*u*t)+c*(3*u*t*t)+end*(t*t*t);
+                            auto tangent=(b-nudge.center)*(3*u*u)+(c-b)*(6*u*t)+(end-c)*(3*t*t);
+                            if(length(tangent)<1e-8){valid=false;break;}
+                            auto pose=from;pose.center=point;pose.heading=std::atan2(tangent.y,tangent.x);
+                            if(!feasible(previous,pose,candidate,false,false)){valid=false;break;}
+                            candidate.path.push_back(point);candidate.pathHeadings.push_back(pose.heading);previous=pose;
+                        }
+                        if(!valid) {e.junctionStatus="Recovery: continuation bridge leaves lane or mask";continue;}
+                        candidate.path.insert(candidate.path.end(),e.path.begin()+join+1,e.path.end());
+                        candidate.pathHeadings.insert(candidate.pathHeadings.end(),e.pathHeadings.begin()+join+1,e.pathHeadings.end());
+                    }
+                    // Endpoint-only checks can jump across a thin gap in the
+                    // union of a curved lane and its junction envelope. Check
+                    // the departure at finer than the 0.5 m/s physics step.
+                    bool executable=true;double checked=0,checkLimit=std::max(3.,e.length*2);auto probe=e.footprint();
+                    for(std::size_t i=1;i<candidate.path.size() && checked<checkLimit;++i) {
+                        auto start=probe;double d=length(candidate.path[i]-start.center);
+                        double take=std::min(d,checkLimit-checked),fraction=d>1e-9?take/d:1.;
+                        double angle=angleDelta(start.heading,candidate.pathHeadings[i])*fraction;
+                        int samples=std::max(1,static_cast<int>(std::ceil(std::max(take/.002,std::abs(angle)/.001))));
+                        for(int j=1;j<=samples;++j) {
+                            double t=static_cast<double>(j)/samples;auto pose=start;
+                            pose.center=start.center+(candidate.path[i]-start.center)*(t*fraction);pose.heading=start.heading+angle*t;
+                            if(!feasible(probe,pose,candidate,i==1,false)){executable=false;break;}
+                            probe=pose;
+                        }
+                        if(!executable)break;checked+=take;
+                    }
+                    if(!executable){e.junctionStatus="Recovery: departure crosses lane boundary";continue;}
+                    candidate.next=1;candidate.segmentProgress=0;++candidate.routeRevision;
+                    candidate.reservedTurn.clear();candidate.reservedApproach.clear();candidate.reservationEnd=1;
+                    candidate.sublaneReservation.clear();PathManeuver claim;claim.begin=0;claim.end=1;
+                    claim.sweep=geometry::swept(from,nudge,claim.padding);candidate.sublaneReservation={claim};
+                    candidate.sublaneReservationRevision=candidate.routeRevision;candidate.sublaneReservationEnd=1;candidate.sublaneReservationProgress=std::abs(distance);
+                    candidate.sublaneAfter=seconds_+2;candidate.laneChangeAfter=seconds_+2;candidate.trafficRecoveryAfter=seconds_+2;
+                    candidate.waitingForManeuver=false;candidate.following=false;candidate.sublaneStatus=distance<0?"Short reverse clearance recovery":"Short forward clearance recovery";
+                    if(!prepareJunctionPlans(candidate))continue;
+                    e=std::move(candidate);++recoveries_;++trafficRecoveryRepairs_;lastFleetRouteCount_=1;return true;
+                }
+                return false;
+            };
+            bool repaired=repair();++trafficRecoveryPasses_;
+            totalTrafficRecoverySeconds_+=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+            if(repaired) break;
+        }
+    }
     bool replanned=recoveryPreview_ || refreshMovingRoute();
     for(auto& e:entities_) {
         if(e.waitingForJunction) { e.speed=0; continue; }
@@ -700,9 +855,17 @@ void Simulation::advance(double dt) {
             break;
         }
         bool brakingForBend=false; double bendBraking=laneTurnDeceleration(e);
-        double followingTarget=followingSpeed(e),bendTarget=urbanSpeedLimit(e,followingTarget,brakingForBend,&bendBraking);
+        double followingTarget=followingSpeed(e);
+        // Native signals constrain speed on the committed route, not a new slot path.
+        if(flow_.predictiveJunctions && !e.networkRoute.empty()) {
+            double signalDistance=0;
+            if(closestStoppingLight(e,&signalDistance)>=0)
+                followingTarget=std::min(followingTarget,std::sqrt(4*e.acceleration*std::max(0.,signalDistance-e.length*.5-.12)));
+        }
+        double bendTarget=urbanSpeedLimit(e,followingTarget,brakingForBend,&bendBraking);
         double targetSpeed=negotiatedSpeed(e,bendTarget),travel=0,newSpeed=0;
         targetSpeed=laneMergeSpeed(e,targetSpeed);
+        if(e.cooperativeRecovery && !e.laneRoute.empty() && e.next<=e.reservationEnd) targetSpeed=std::min(.5,e.desiredSpeed);
         if(!e.networkRoute.empty()) targetSpeed=std::min(targetSpeed,lanes_[e.networkRoute[e.networkStage]].speedLimit);
         else for(int lane:e.laneRoute) targetSpeed=std::min(targetSpeed,lanes_[lane].speedLimit);
         if(seconds_<e.cooperativeUntil) targetSpeed=std::min(targetSpeed,e.cooperativeSpeedCap);
@@ -786,6 +949,9 @@ void Simulation::advance(double dt) {
         // deliberately slow vehicle is not classified as a stuck blocker.
         if(length(e.center-before[i])<=.01*dt) e.stuckSeconds+=dt;
         else e.stuckSeconds=0;
+        if(e.inOpenJunction && length(e.center-before[i])<=stoppedSpeedThreshold*dt)
+            e.junctionStationarySeconds+=dt;
+        else e.junctionStationarySeconds=0;
     }
     entities_.erase(std::remove_if(entities_.begin(),entities_.end(),[this](const Entity& e) {
         if(!e.networkRoute.empty() && e.networkStage+1<e.networkRoute.size()) return false;
@@ -796,7 +962,7 @@ void Simulation::advance(double dt) {
         ++completed_; return true;
     }),entities_.end());
     seconds_+=dt;
-    if(!recoveryPreview_) clearStuckVehicles();
+    if(!recoveryPreview_) { clearStuckVehicles(); updateTrafficMonitoring(dt); }
 }
 void Simulation::recordFinishedStopTime(const Entity& e) {
     completedStopMin_=(completed_+removedStuckVehicles_)?std::min(completedStopMin_,e.stoppedSeconds):e.stoppedSeconds;

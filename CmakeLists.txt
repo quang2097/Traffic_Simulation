@@ -16,6 +16,7 @@ target_sources(traffic PRIVATE src/NodeGraph.cpp)
 target_sources(traffic PRIVATE src/RoadBuilder.cpp)
 target_sources(traffic PRIVATE src/HybridTraffic.cpp)
 target_sources(traffic PRIVATE src/TrafficFlow.cpp)
+target_sources(traffic PRIVATE src/TrafficMonitoring.cpp)
 target_link_libraries(traffic PRIVATE Threads::Threads)
 target_include_directories(traffic PUBLIC include)
 if(WIN32)
@@ -27,6 +28,33 @@ endif()
 add_executable(traffic_demo src/main.cpp)
 target_link_libraries(traffic_demo PRIVATE traffic)
 enable_testing()
+add_executable(parallel_departure_tests tests/ParallelDepartureTests.cpp)
+target_link_libraries(parallel_departure_tests PRIVATE traffic)
+add_test(NAME parallel_departure COMMAND parallel_departure_tests)
+add_executable(traffic_monitoring_tests tests/TrafficMonitoringTests.cpp)
+target_link_libraries(traffic_monitoring_tests PRIVATE traffic)
+add_test(NAME traffic_monitoring COMMAND traffic_monitoring_tests)
+add_executable(map_network_audit tests/MapNetworkAudit.cpp)
+target_link_libraries(map_network_audit PRIVATE traffic)
+add_executable(lateral_clearance_tests tests/LateralClearanceTests.cpp)
+target_link_libraries(lateral_clearance_tests PRIVATE traffic)
+add_test(NAME lateral_clearance COMMAND lateral_clearance_tests)
+add_executable(mask_query_benchmark tests/MaskQueryBenchmark.cpp)
+target_link_libraries(mask_query_benchmark PRIVATE traffic)
+add_executable(junction_handoff_tests tests/JunctionHandoffTests.cpp)
+target_link_libraries(junction_handoff_tests PRIVATE traffic)
+add_test(NAME junction_handoff COMMAND junction_handoff_tests)
+add_executable(lane_edge_recovery_tests tests/LaneEdgeRecoveryTests.cpp)
+target_link_libraries(lane_edge_recovery_tests PRIVATE traffic)
+add_test(NAME lane_edge_recovery COMMAND lane_edge_recovery_tests)
+add_executable(map_soak tests/MapSoak.cpp)
+target_link_libraries(map_soak PRIVATE traffic)
+add_executable(route_geometry_tests tests/RouteGeometryTests.cpp)
+target_link_libraries(route_geometry_tests PRIVATE traffic)
+add_test(NAME route_geometry COMMAND route_geometry_tests)
+add_executable(junction_connection_tests tests/JunctionConnectionTests.cpp)
+target_link_libraries(junction_connection_tests PRIVATE traffic)
+add_test(NAME junction_connections COMMAND junction_connection_tests)
 add_executable(junction_capacity_tests tests/JunctionCapacityTests.cpp)
 target_link_libraries(junction_capacity_tests PRIVATE traffic)
 add_test(NAME junction_capacity COMMAND junction_capacity_tests)
@@ -161,11 +189,11 @@ if(TRAFFIC_BUILD_UI AND WIN32)
   target_include_directories(traffic_imgui PUBLIC libs/imgui libs/imgui/backends)
   target_link_libraries(traffic_imgui PUBLIC opengl32 gdi32 dwmapi)
   add_executable(traffic_ui src/UiMain.cpp src/SimulationView.cpp)
-  set(TRAFFIC_UI_OUTPUT_NAME "traffic_capacity" CACHE STRING "Viewer executable name (use another name while a viewer is running)")
+  set(TRAFFIC_UI_OUTPUT_NAME "traffic_wassup6" CACHE STRING "Viewer executable name (use another name while a viewer is running)")
   set_target_properties(traffic_ui PROPERTIES OUTPUT_NAME "${TRAFFIC_UI_OUTPUT_NAME}")
   target_compile_definitions(traffic_ui PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_compile_definitions(traffic_ui PRIVATE TRAFFIC_PROJECT_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
-  target_link_libraries(traffic_ui PRIVATE traffic traffic_imgui)
+  target_link_libraries(traffic_ui PRIVATE traffic traffic_imgui comdlg32)
   add_custom_command(TARGET traffic_ui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:traffic_ui>/examples"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -174,4 +202,17 @@ if(TRAFFIC_BUILD_UI AND WIN32)
       "${CMAKE_CURRENT_SOURCE_DIR}/examples/annotated-map.png" "$<TARGET_FILE_DIR:traffic_ui>/examples/annotated-map.png"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${CMAKE_CURRENT_SOURCE_DIR}/examples/curved-mask.png" "$<TARGET_FILE_DIR:traffic_ui>/examples/curved-mask.png")
+endif()
+
+# Optional retained controller snapshot for this local paired soak experiment.
+if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/HybridTraffic.cpp")
+  add_executable(map_soak_baseline_fast tests/MapSoak.cpp
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/HybridTraffic.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/TrafficFlow.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/Simulation.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/Lanes.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/Geometry.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/SignalQueue.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/soak-baseline/SignalApproach.cpp")
+  target_link_libraries(map_soak_baseline_fast PRIVATE traffic)
 endif()

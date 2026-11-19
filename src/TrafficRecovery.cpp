@@ -25,11 +25,17 @@ Footprint Simulation::stopProbe(const Entity& e) const {
     auto from=e.footprint(),to=from;
     to.center=from.center+Vec2{std::cos(e.heading),std::sin(e.heading)}*.25;
     if(e.next<e.path.size() && e.pathHeadings.size()==e.path.size()) {
-        Vec2 delta=e.path[e.next]-e.center; double distance=length(delta);
-        if(distance>1e-8) {
-            double fraction=std::min(1.0,.25/distance);
-            to.center=from.center+delta*fraction;
-            to.heading=from.heading+angleDelta(from.heading,e.pathHeadings[e.next])*fraction;
+        double remaining=.25;
+        // The next dense curve sample may be only millimeters away. Walk the
+        // full probe distance so a real blockage is not labeled unexplained.
+        for(std::size_t i=e.next;i<e.path.size();++i) {
+            auto delta=e.path[i]-to.center;double distance=length(delta);
+            if(distance<1e-9) continue;
+            double fraction=std::min(1.,remaining/distance);
+            to.center=to.center+delta*fraction;
+            to.heading+=angleDelta(to.heading,e.pathHeadings[i])*fraction;
+            remaining-=distance*fraction;
+            if(remaining<1e-9) break;
         }
     }
     return to;

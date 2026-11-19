@@ -1,0 +1,17 @@
+# Shortest routes and forward junction turns
+
+Run `build/traffic_wassup6.exe`.
+
+Destinations remain randomly selected from eligible reachable endpoints, respecting each source node's exclusions. For a selected endpoint, road routing now uses Dijkstra with geometric lane/connector length as the edge cost. Random edge weights, congestion penalties and speed-limit weighting no longer send a vehicle along a longer route. This favors shortest distance rather than fastest travel time. Lane-width restrictions remain enforced. Tactical lane changes can still happen along the trip.
+
+Free-junction crossings use directly sampled cubic curves with analytic tangent headings. Several handle lengths are checked, and the shortest acceptable candidate is retained. Each candidate must fit the road mask under swept vehicle-body checks, respect a vehicle-length-based curvature limit, and keep its total rotation close to the requested turn. This prevents refitting a sampled guide from introducing a large looping correction. An initial forward lead clears the incoming row before steering. U-turns use an arc followed by an outgoing straight, rather than bending backwards to a goal behind the turning point. Large vehicles get larger turning radii; an infeasible turn is rejected instead of adding a loop or teleporting.
+
+Crossing plans are rejected if they follow an authored road corridor against its direction, including incoming one-way streams. Crossing a corridor transversely remains possible. U-turns reserve their remaining swept corridor against conflicting entries, because an acceleration-only forecast was insufficient to prevent opposing merge deadlocks. Disjoint streams can continue; ordinary movements retain concurrent predictive admission. A whole-junction exclusive version was rejected because it caused excessive waiting.
+
+A following sublane merge can no longer reserve away the leader's forward escape when the leader is already ahead and moving away in the same direction. Actual body clearance is still checked. Stoppage probes now walk the full look-ahead distance across dense curve samples, improving blockage classification.
+
+`route_geometry` tests a shared-destination fork where the shorter road is deliberately slower, across 20 seeds. It also tests 10 m truck crossings, turn curvature, absence of loops/upstream corridor entry, and completed trips. Existing startup runs check sustained mixed traffic with Gaussian vehicle dimensions, physical clearances, travel budgets and deletion disabled.
+
+These are shortest graph routes and the shortest feasible member of the tested curve family, not a globally optimal continuous-space planner. Invalid geometry or demand exceeding capacity can still cause queues; the changes do not promise jam-free operation on arbitrary maps.
+
+Final validation: all 39 targeted tests passed using `ctest --test-dir build -E "gridlock_|continuous_flow|urban_traffic|^mask$" --output-on-failure -j 3`. Sustained startup runs drained 336/336 admitted trips for seed 42, 234/234 for seed 7 and 237/237 for seed 123 (807 total), with deletion disabled and mask, preferred-clearance and per-step travel checks enabled. The finite mixed-traffic benchmarks also drained all 80 offered trips per seed. The stricter geometry and U-turn admission rules can reduce entry capacity compared with the previous controller, especially with frequent return trips; no throughput improvement is claimed.

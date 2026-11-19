@@ -1,0 +1,9 @@
+t=0.00833333 active=23 completed=0
+t=10.0083 active=23 completed=0
+t=20.0083 active=21 completed=2
+t=30.0083 active=17 completed=6
+t=40.0083 active=15 completed=8
+t=50.0083 active=11 completed=12
+t=60.0083 active=6 completed=17
+t=70.0083 active=3 completed=20
+DONE replay_seconds=77.3417 completed=23 remaining=0 violations=0 deleted=0

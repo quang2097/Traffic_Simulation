@@ -8,12 +8,29 @@ namespace traffic {
 void Simulation::setStuckVehicleSettings(StuckVehicleSettings settings) {
     if(!std::isfinite(settings.timeoutSeconds) || settings.timeoutSeconds<1 || settings.timeoutSeconds>3600)
         throw std::invalid_argument("Stuck timeout must be 1–3600 seconds");
+    if(!std::isfinite(settings.junctionTimeoutSeconds) || settings.junctionTimeoutSeconds<1 || settings.junctionTimeoutSeconds>3600)
+        throw std::invalid_argument("Junction timeout must be 1–3600 seconds");
+    bool resetQueue=settings.enabled!=stuckVehicleSettings_.enabled || settings.timeoutSeconds!=stuckVehicleSettings_.timeoutSeconds;
+    bool resetJunction=settings.junctionEnabled!=stuckVehicleSettings_.junctionEnabled || settings.junctionTimeoutSeconds!=stuckVehicleSettings_.junctionTimeoutSeconds;
     stuckVehicleSettings_=settings;
     // A newly enabled policy gets a full observation period.
-    for(auto& e:entities_) e.stuckSeconds=0;
+    for(auto& e:entities_) {
+        if(resetQueue) e.stuckSeconds=0;
+        if(resetJunction) e.junctionStationarySeconds=0;
+    }
     nextStuckCheck_=seconds_;
 }
 void Simulation::clearStuckVehicles() {
+    // This policy applies only after the lane-to-free-junction handoff, never
+    // to an approach queue. Remove every expired body; do not count an arrival.
+    if(stuckVehicleSettings_.junctionEnabled) {
+        entities_.erase(std::remove_if(entities_.begin(),entities_.end(),[&](const Entity& e) {
+            if(!e.inOpenJunction || e.junctionStationarySeconds+1e-9<stuckVehicleSettings_.junctionTimeoutSeconds) return false;
+            recordFinishedStopTime(e); lastRemovedStuckVehicle_=e.id;
+            ++removedStuckVehicles_; ++removedJunctionVehicles_;
+            return true;
+        }),entities_.end());
+    }
     if(seconds_<nextStuckCheck_) return;
     nextStuckCheck_=seconds_+.5;
     if(!stuckVehicleSettings_.enabled || entities_.empty()) return;

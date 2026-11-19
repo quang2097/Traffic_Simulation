@@ -1,0 +1,4 @@
+Counterfactual: restrict the road-body admission sweep to its first path segment.
+Result: expected failure: junction admission checked only its first step and committed into a downstream road queue.
+Full crossing check: junction_handoff_tests passes, including the blocker 8 m ahead and release after it clears.
+Controller sources and the running soak/viewer executables were unchanged during this test.

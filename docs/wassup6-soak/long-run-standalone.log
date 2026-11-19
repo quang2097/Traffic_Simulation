@@ -1,0 +1,7 @@
+t=0.00833333 active=0 arrived=0 recoveries=0
+t=30.0083 active=15 arrived=4 recoveries=0
+t=60.0083 active=12 arrived=23 recoveries=0
+t=90.0083 active=9 arrived=38 recoveries=1
+t=120.008 active=15 arrived=42 recoveries=9
+t=150.008 active=2 arrived=55 recoveries=10
+seed=42 rate=1 admitted=57 completed=57 remaining=0 recoveries=10 sim=150.725 wall=252.469s

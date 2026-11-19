@@ -1,0 +1,224 @@
+seed=42 scale=0.074 pixels=2100x1250 lanes=95
+network mask validation passed
+lights=6 deletion=off cap=100 dt=1/120
+PROGRESS t=60 inserted=89 completed=21 active=68 max_free_stop=0 wall=58.6961
+STALL t=84 id=12 kind=Car xy=71.6702,68.6332 free=0 lane=12 reason=Legal stop: waiting for clear turn exit junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=15 goal=71.6702,68.6332
+STALL t=86 id=14 kind=Motorbike xy=68.1933,69.8495 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=-1.16461 exit=7 goal=70.9578,67.7119
+STALL t=86 id=20 kind=Motorbike xy=69.2436,71.6241 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=0.881792 exit=15 goal=72.2095,69.3308
+STALL t=86 id=36 kind=Motorbike xy=53.6638,82.5559 free=0 lane=12 reason=Unexplained stop: fleet recovery required junction_status= lateral=0 exit=16 goal=71.6702,68.6332
+STALL t=87 id=39 kind=Motorbike xy=51.7981,83.9985 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=16 goal=71.6702,68.6332
+STALL t=89 id=43 kind=Bike xy=50.1146,85.3002 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=16 goal=71.6702,68.6332
+STALL t=90 id=48 kind=Motorbike xy=48.4892,86.557 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=6 goal=71.6702,68.6332
+STALL t=99 id=28 kind=Motorbike xy=73.5909,71.1172 free=0 lane=13 reason=Legal stop: waiting for clear turn exit junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=15 goal=73.5909,71.1172
+STALL t=100 id=15 kind=Motorbike xy=54.0543,55.568 free=0 lane=15 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=-1 goal=5.91568,37.601
+STALL t=100 id=19 kind=Car xy=51.0999,57.7576 free=0 lane=15 reason=Unexplained stop: fleet recovery required junction_status= lateral=0 exit=-1 goal=7.03592,38.1513
+STALL t=100 id=32 kind=Motorbike xy=67.9381,73.9992 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=-1.1778 exit=17 goal=72.8704,70.1855
+STALL t=100 id=46 kind=Motorbike xy=71.9854,72.3586 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=16 goal=73.5909,71.1172
+STALL t=101 id=26 kind=Bike xy=66.8742,72.3415 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=7 goal=71.6702,68.6332
+STALL t=101 id=33 kind=Motorbike xy=66.5173,71.1587 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=-1.15398 exit=7 goal=70.9643,67.7203
+STALL t=102 id=53 kind=Motorbike xy=66.085,75.5115 free=0 lane=13 reason=Legal stop: red / yellow signal junction_status= lateral=-1.11508 exit=17 goal=72.9088,70.2351
+STALL t=103 id=50 kind=Motorbike xy=70.2419,73.7067 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=73.5909,71.1172
+STALL t=107 id=58 kind=Motorbike xy=68.3289,75.1858 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=16 goal=73.5909,71.1172
+STALL t=108 id=31 kind=Motorbike xy=55.983,54.1338 free=0 lane=15 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=-1 goal=5.92954,37.6078
+STALL t=109 id=18 kind=Motorbike xy=57.8873,52.7177 free=0 lane=15 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=-1 goal=5.83734,37.5625
+STALL t=109 id=40 kind=Motorbike xy=59.7693,51.3182 free=0 lane=15 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=-1 goal=5.9117,37.599
+STALL t=112 id=64 kind=Motorbike xy=66.4282,76.6555 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=15 goal=73.5909,71.1172
+STALL t=114 id=69 kind=Motorbike xy=64.554,78.1046 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=15 goal=73.5909,71.1172
+STALL t=117 id=72 kind=Motorbike xy=62.8065,79.4558 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=73.5909,71.1172
+STALL t=118 id=51 kind=Motorbike xy=99.8155,60.4854 free=0 lane=8 reason=Legal stop: waiting for clear turn exit junction_status=Crossing conflict or occupied exit buffer lateral=-1.0593 exit=15 goal=99.8155,60.4854
+STALL t=119 id=74 kind=Motorbike xy=64.2582,76.961 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=-1.08587 exit=7 goal=72.9266,70.2582
+STALL t=120 id=65 kind=Motorbike xy=101.431,61.9562 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.07708 exit=11 goal=99.8037,60.4986
+PROGRESS t=120 inserted=136 completed=56 active=80 max_free_stop=0 wall=129.338
+STALL t=122 id=56 kind=Motorbike xy=102.266,61.2581 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=6 goal=100.522,59.6963
+STALL t=124 id=82 kind=Motorbike xy=61.0194,80.8376 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=6 goal=73.5909,71.1172
+STALL t=128 id=89 kind=Motorbike xy=62.3414,78.3232 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=-1.18051 exit=9 goal=72.8687,70.1833
+STALL t=129 id=91 kind=Motorbike xy=59.1787,82.2609 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=73.5909,71.1172
+STALL t=133 id=97 kind=Bike xy=60.4514,79.7254 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=-1.22728 exit=7 goal=72.8401,70.1463
+STALL t=135 id=59 kind=Motorbike xy=103.984,62.7967 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=17 goal=100.522,59.6963
+STALL t=136 id=60 kind=Car xy=83.3452,71.3652 free=0 lane=10 reason=Legal stop: waiting for clear turn exit junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=15 goal=83.3452,71.3652
+STALL t=137 id=61 kind=Motorbike xy=105.714,64.347 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=15 goal=100.522,59.6963
+STALL t=138 id=63 kind=Motorbike xy=107.457,65.9078 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=100.522,59.6963
+STALL t=138 id=68 kind=Motorbike xy=85.0009,74.5938 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=83.3452,71.3652
+STALL t=138 id=70 kind=Motorbike xy=109.679,67.1867 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0.529867 exit=15 goal=100.876,59.3016
+STALL t=138 id=71 kind=Motorbike xy=108.539,68.2894 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.05208 exit=6 goal=99.8203,60.48
+STALL t=139 id=73 kind=Motorbike xy=111.547,68.7942 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0.578715 exit=7 goal=100.908,59.2652
+STALL t=139 id=75 kind=Motorbike xy=110.307,69.8452 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.0313 exit=16 goal=99.8342,60.4645
+STALL t=140 id=77 kind=Motorbike xy=86.6101,76.2317 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=9 goal=83.3452,71.3652
+STALL t=140 id=78 kind=Motorbike xy=113.049,70.6871 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0.171076 exit=16 goal=100.636,59.5689
+STALL t=140 id=86 kind=Motorbike xy=112.028,71.4251 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.0598 exit=7 goal=99.8152,60.4857
+STALL t=141 id=79 kind=Motorbike xy=88.4729,77.5998 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=83.3452,71.3652
+STALL t=141 id=84 kind=Motorbike xy=114.6,72.306 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=6 goal=100.522,59.6963
+STALL t=141 id=94 kind=Motorbike xy=113.601,72.8292 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.05662 exit=11 goal=99.8173,60.4834
+STALL t=142 id=85 kind=Motorbike xy=90.2482,78.9036 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=15 goal=83.3452,71.3652
+STALL t=142 id=90 kind=Bike xy=116.136,73.6818 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=11 goal=100.522,59.6963
+STALL t=142 id=98 kind=Motorbike xy=116.927,73.1061 free=0 lane=8 reason=Unexplained stop: fleet recovery required junction_status= lateral=0.956373 exit=16 goal=101.16,58.9839
+STALL t=142 id=99 kind=Motorbike xy=115.208,74.2593 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.04928 exit=17 goal=99.8222,60.4779
+STALL t=142 id=101 kind=Bike xy=118.589,74.636 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0.925937 exit=7 goal=101.14,59.0066
+STALL t=142 id=102 kind=Motorbike xy=116.959,75.8001 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=-1.02961 exit=16 goal=99.8353,60.4633
+STALL t=143 id=93 kind=Motorbike xy=91.9952,80.1866 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=83.3452,71.3652
+STALL t=143 id=105 kind=Motorbike xy=120.071,76.3697 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0.623346 exit=17 goal=100.938,59.232
+STALL t=144 id=107 kind=Motorbike xy=93.7985,81.511 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=83.3452,71.3652
+STALL t=144 id=108 kind=Motorbike xy=121.404,78.4002 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=16 goal=100.522,59.6963
+STALL t=145 id=109 kind=Motorbike xy=95.5397,82.7897 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=15 goal=83.3452,71.3652
+STALL t=145 id=110 kind=Motorbike xy=123.156,79.9691 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=100.522,59.6963
+STALL t=146 id=111 kind=Motorbike xy=58.8665,81.0744 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=-1.12964 exit=7 goal=72.8999,70.2236
+STALL t=146 id=113 kind=Motorbike xy=97.2962,84.0798 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=83.3452,71.3652
+STALL t=146 id=115 kind=Motorbike xy=124.761,81.4067 free=0 lane=8 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=11 goal=100.522,59.6963
+STALL t=147 id=114 kind=Motorbike xy=57.8287,84.3676 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0.840819 exit=16 goal=74.1052,71.7824
+STALL t=147 id=118 kind=Motorbike xy=99.069,85.3818 free=0 lane=10 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=83.3452,71.3652
+STALL t=150 id=116 kind=Motorbike xy=57.1604,82.3608 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=-1.15552 exit=9 goal=72.884,70.2031
+STALL t=151 id=119 kind=Motorbike xy=55.4682,85.1299 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=73.5909,71.1172
+STALL t=154 id=121 kind=Car xy=52.7048,87.2666 free=0 lane=13 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=73.5909,71.1172
+PROGRESS t=180 inserted=165 completed=89 active=76 max_free_stop=0 wall=166.985
+PROGRESS t=240 inserted=192 completed=111 active=81 max_free_stop=0 wall=223.127
+STALL t=300 id=188 kind=Bike xy=55.5928,79.5491 free=0 lane=12 reason=Unexplained stop: fleet recovery required junction_status= lateral=-1.2 exit=15 goal=70.9383,67.6867
+PROGRESS t=300 inserted=219 completed=140 active=79 max_free_stop=0 wall=308.218
+PROGRESS t=360 inserted=246 completed=165 active=81 max_free_stop=0 wall=361.352
+PROGRESS t=420 inserted=266 completed=191 active=75 max_free_stop=0 wall=395.369
+PROGRESS t=480 inserted=295 completed=211 active=84 max_free_stop=0 wall=438.373
+STALL t=503 id=274 kind=Bike xy=54.0716,80.7264 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=-1.2 exit=6 goal=70.9407,67.6898
+STALL t=519 id=281 kind=Motorbike xy=52.3932,82.022 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=-1.2 exit=15 goal=70.9374,67.6855
+PROGRESS t=540 inserted=319 completed=238 active=81 max_free_stop=0 wall=519.891
+STALL t=543 id=294 kind=Motorbike xy=50.4408,83.5311 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=-1.2 exit=9 goal=70.9361,67.6839
+STALL t=568 id=305 kind=Bike xy=48.619,84.9397 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=-1.2 exit=9 goal=70.9361,67.6839
+PROGRESS t=600 inserted=347 completed=263 active=84 max_free_stop=0 wall=602.922
+STALL t=643 id=337 kind=Bike xy=54.9108,83.1086 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=1.2 exit=16 goal=72.4042,69.5825
+STALL t=645 id=338 kind=Motorbike xy=53.1871,84.4396 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=1.2 exit=17 goal=72.3993,69.5762
+PROGRESS t=660 inserted=372 completed=287 active=85 max_free_stop=0 wall=668.369
+PROGRESS t=720 inserted=405 completed=313 active=92 max_free_stop=0 wall=784.893
+STALL t=765 id=395 kind=Motorbike xy=51.4149,85.8116 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=1.2 exit=17 goal=72.4042,69.5825
+STALL t=769 id=387 kind=Motorbike xy=98.3633,30.9546 free=0 lane=4 reason=Circular vehicle blockage: coordinated yield junction_status=Signal queue or reversing lateral=0 exit=17 goal=91.9125,38.0773
+STALL t=769 id=388 kind=Motorbike xy=99.1395,31.7832 free=0 lane=4 reason=Circular vehicle blockage: coordinated yield junction_status=Signal queue or reversing lateral=0 exit=6 goal=91.9125,38.0773
+STALL t=771 id=392 kind=Motorbike xy=101.051,30.7999 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=16 goal=91.9125,38.0773
+STALL t=773 id=396 kind=Motorbike xy=103.053,29.961 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=17 goal=91.9125,38.0773
+PROGRESS t=780 inserted=431 completed=331 active=100 max_free_stop=0 wall=862.535
+STALL t=786 id=400 kind=Bike xy=105.013,28.9717 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=11 goal=91.9125,38.0773
+STALL t=800 id=404 kind=Motorbike xy=88.4334,35.7208 free=0 lane=5 reason=Legal stop: waiting for clear turn exit junction_status=No feasible crossing from current pose lateral=0.747959 exit=9 goal=88.4334,35.7208
+STALL t=801 id=409 kind=Motorbike xy=107.055,27.7014 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=91.9125,38.0773
+STALL t=804 id=406 kind=Car xy=90.8054,33.5971 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=6 goal=88.8893,36.3137
+STALL t=806 id=418 kind=Bike xy=49.5581,87.2473 free=0 lane=12 reason=Legal stop: vehicle ahead junction_status= lateral=1.2 exit=16 goal=72.4042,69.5825
+STALL t=809 id=414 kind=Motorbike xy=109.662,21.4939 free=0 lane=5 reason=Unexplained stop: fleet recovery required junction_status=Signal queue or reversing lateral=0 exit=17 goal=88.8893,36.3137
+STALL t=810 id=415 kind=Motorbike xy=111.417,20.1368 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=16 goal=88.8893,36.3137
+STALL t=814 id=416 kind=Motorbike xy=113.239,18.7288 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=6 goal=88.8893,36.3137
+STALL t=817 id=419 kind=Motorbike xy=115.09,17.2976 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=6 goal=88.8893,36.3137
+STALL t=821 id=412 kind=Motorbike xy=93.7691,32.0394 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=-0.768334 exit=6 goal=89.3592,36.9216
+STALL t=822 id=420 kind=Motorbike xy=108.999,26.1821 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=91.9125,38.0773
+STALL t=826 id=421 kind=Car xy=117.842,15.1701 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status=Signal queue or reversing lateral=0 exit=11 goal=88.8893,36.3137
+STALL t=828 id=422 kind=Motorbike xy=120.555,13.0736 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=16 goal=88.8893,36.3137
+STALL t=835 id=427 kind=Motorbike xy=122.38,11.6627 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=11 goal=88.8893,36.3137
+PROGRESS t=840 inserted=440 completed=340 active=100 max_free_stop=0 wall=948.441
+STALL t=842 id=425 kind=Motorbike xy=110.757,24.8082 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=6 goal=91.9125,38.0773
+STALL t=854 id=433 kind=Motorbike xy=124.14,10.3022 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=6 goal=88.8893,36.3137
+STALL t=855 id=429 kind=Motorbike xy=112.548,23.4081 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=9 goal=91.9125,38.0773
+STALL t=857 id=431 kind=Motorbike xy=114.35,21.9996 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=9 goal=91.9125,38.0773
+STALL t=880 id=436 kind=Motorbike xy=116.105,20.6281 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=17 goal=91.9125,38.0773
+STALL t=885 id=438 kind=Motorbike xy=125.884,8.95372 free=0 lane=5 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=7 goal=88.8893,36.3137
+STALL t=899 id=439 kind=Bike xy=117.852,19.2627 free=0 lane=4 reason=Legal stop: vehicle ahead junction_status= lateral=0 exit=9 goal=91.9125,38.0773
+PROGRESS t=900 inserted=441 completed=341 active=100 max_free_stop=0 wall=1038.33
+SOURCE 0 rate=0.25 offered=225 inserted=147
+SOURCE 4 rate=0.25 offered=225 inserted=133
+SOURCE 6 rate=0.16 offered=144 inserted=61
+SOURCE 10 rate=1 offered=900 inserted=24
+SOURCE 15 rate=1 offered=900 inserted=40
+SOURCE 16 rate=1 offered=900 inserted=36
+REMAIN id=12 xy=71.6702,68.6332 stop=876.3 free=0 reason=Legal stop: waiting for clear turn exit
+REMAIN id=14 xy=68.1933,69.8495 stop=874.283 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=15 xy=54.0543,55.568 stop=860.15 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=18 xy=57.8873,52.7177 stop=851.608 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=19 xy=51.0999,57.7576 stop=860.783 free=0 reason=Unexplained stop: fleet recovery required
+REMAIN id=20 xy=69.2436,71.6241 stop=874.033 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=26 xy=66.8742,72.3415 stop=859.842 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=28 xy=73.5909,71.1172 stop=861.05 free=0 reason=Legal stop: waiting for clear turn exit
+REMAIN id=31 xy=55.983,54.1338 stop=852.658 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=32 xy=67.9381,73.9992 stop=860.342 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=33 xy=66.5173,71.1587 stop=859.792 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=36 xy=53.6638,82.5559 stop=874.092 free=0 reason=Unexplained stop: fleet recovery required
+REMAIN id=39 xy=51.7981,83.9985 stop=873.625 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=40 xy=59.7693,51.3182 stop=851.058 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=43 xy=50.1146,85.3002 stop=871.675 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=46 xy=71.9854,72.3586 stop=860.425 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=48 xy=48.4892,86.557 stop=870.2 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=50 xy=70.2419,73.7067 stop=857.542 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=51 xy=99.8155,60.4854 stop=842.8 free=0 reason=Legal stop: waiting for clear turn exit
+REMAIN id=53 xy=66.085,75.5115 stop=858.575 free=0 reason=Legal stop: red / yellow signal
+REMAIN id=56 xy=102.266,61.2581 stop=838.35 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=58 xy=68.3289,75.1858 stop=853.108 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=59 xy=103.984,62.7967 stop=825.008 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=60 xy=83.3452,71.3652 stop=824.775 free=0 reason=Legal stop: waiting for clear turn exit
+REMAIN id=61 xy=105.714,64.347 stop=823.933 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=63 xy=107.457,65.9078 stop=823 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=64 xy=66.4282,76.6555 stop=848.35 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=65 xy=101.431,61.9562 stop=840.95 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=68 xy=85.0009,74.5938 stop=822.542 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=69 xy=64.554,78.1046 stop=846.817 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=70 xy=109.679,67.1867 stop=822.108 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=71 xy=108.539,68.2894 stop=822.117 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=72 xy=62.8065,79.4558 stop=843.883 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=73 xy=111.547,68.7942 stop=821.275 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=74 xy=64.2582,76.961 stop=841.367 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=75 xy=110.307,69.8452 stop=821.275 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=77 xy=86.6101,76.2317 stop=820.933 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=78 xy=113.049,70.6871 stop=820.458 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=79 xy=88.4729,77.5998 stop=819.717 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=82 xy=61.0194,80.8376 stop=836.7 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=84 xy=114.6,72.306 stop=819.667 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=85 xy=90.2482,78.9036 stop=818.625 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=86 xy=112.028,71.4251 stop=820.458 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=89 xy=62.3414,78.3232 stop=832.217 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=90 xy=116.136,73.6818 stop=818.875 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=91 xy=59.1787,82.2609 stop=831.358 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=93 xy=91.9952,80.1866 stop=817.608 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=94 xy=113.601,72.8292 stop=819.667 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=97 xy=60.4514,79.7254 stop=827.375 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=98 xy=116.927,73.1061 stop=818.883 free=0 reason=Unexplained stop: fleet recovery required
+REMAIN id=99 xy=115.208,74.2593 stop=818.892 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=101 xy=118.589,74.636 stop=818.108 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=102 xy=116.959,75.8001 stop=818.125 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=105 xy=120.071,76.3697 stop=817.358 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=107 xy=93.7985,81.511 stop=816.617 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=108 xy=121.404,78.4002 stop=816.567 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=109 xy=95.5397,82.7897 stop=815.567 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=110 xy=123.156,79.9691 stop=815.742 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=111 xy=58.8665,81.0744 stop=814.225 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=113 xy=97.2962,84.0798 stop=814.575 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=114 xy=57.8287,84.3676 stop=813.833 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=115 xy=124.761,81.4067 stop=814.842 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=116 xy=57.1604,82.3608 stop=810.883 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=118 xy=99.069,85.3818 stop=813.65 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=119 xy=55.4682,85.1299 stop=809.442 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=121 xy=52.7048,87.2666 stop=806.55 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=188 xy=55.5928,79.5491 stop=660.167 free=0 reason=Unexplained stop: fleet recovery required
+REMAIN id=274 xy=54.0716,80.7264 stop=457.558 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=281 xy=52.3932,82.022 stop=441.95 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=294 xy=50.4408,83.5311 stop=417.833 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=305 xy=48.619,84.9397 stop=392.942 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=337 xy=54.9108,83.1086 stop=317.008 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=338 xy=53.1871,84.4396 stop=315.667 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=387 xy=98.3633,30.9546 stop=191.092 free=0 reason=Circular vehicle blockage: coordinated yield
+REMAIN id=388 xy=99.1395,31.7832 stop=191.158 free=0 reason=Circular vehicle blockage: coordinated yield
+REMAIN id=392 xy=101.051,30.7999 stop=189.258 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=395 xy=51.4149,85.8116 stop=195.083 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=396 xy=103.053,29.961 stop=187.033 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=400 xy=105.013,28.9717 stop=174.125 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=404 xy=88.4334,35.7208 stop=160.4 free=0 reason=Legal stop: waiting for clear turn exit
+REMAIN id=406 xy=90.8054,33.5971 stop=156.325 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=409 xy=107.055,27.7014 stop=159.992 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=412 xy=93.7691,32.0394 stop=139.458 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=414 xy=109.662,21.4939 stop=151.058 free=0 reason=Unexplained stop: fleet recovery required
+REMAIN id=415 xy=111.417,20.1368 stop=150.742 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=416 xy=113.239,18.7288 stop=146.442 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=418 xy=49.5581,87.2473 stop=154.017 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=419 xy=115.09,17.2976 stop=143.408 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=420 xy=108.999,26.1821 stop=138.317 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=421 xy=117.842,15.1701 stop=134.9 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=422 xy=120.555,13.0736 stop=132.883 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=425 xy=110.757,24.8082 stop=118.417 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=427 xy=122.38,11.6627 stop=125.5 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=429 xy=112.548,23.4081 stop=105.792 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=431 xy=114.35,21.9996 stop=103.15 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=433 xy=124.14,10.3022 stop=106.508 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=436 xy=116.105,20.6281 stop=80.1417 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=438 xy=125.884,8.95372 stop=75.3667 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=439 xy=117.852,19.2627 stop=61.5583 free=0 reason=Legal stop: vehicle ahead
+REMAIN id=441 xy=119.678,17.8354 stop=35.3917 free=0 reason=Legal stop: vehicle ahead
+DONE seconds=900 completed=341 admitted=441 min_clearance=0.148247 max_free_stop=3.49167

@@ -1,0 +1,82 @@
+seed=256 scale=0.074 pixels=2100x1250 lanes=95
+network mask validation passed
+lights=6 deletion=off cap=100 dt=1/120
+PROGRESS t=60 inserted=97 completed=34 active=63 max_free_stop=0 wall=91.948
+PROGRESS t=120 inserted=159 completed=83 active=76 max_free_stop=0 wall=325.258
+STALL t=165 id=78 kind=Motorbike xy=100.822,61.3604 free=0 lane=8 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-2.41116 junction_status=Crossing conflict or occupied exit buffer lateral=-1.03978 exit=11 goal=100.822,61.3604
+STALL t=167 id=83 kind=Motorbike xy=102.609,62.9334 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: signal blocks short step lateral=-1.01881 exit=6 goal=100.696,61.2201
+PROGRESS t=180 inserted=213 completed=126 active=87 max_free_stop=0 wall=593.669
+STALL t=234 id=68 kind=Motorbike xy=101.573,60.3958 free=0 lane=8 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-2.41116 junction_status=Crossing conflict or occupied exit buffer lateral=0.179819 exit=11 goal=101.573,60.3958
+STALL t=235 id=76 kind=Motorbike xy=103.112,62.0155 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: signal blocks short step lateral=0 exit=7 goal=101.38,60.4649
+STALL t=237 id=81 kind=Motorbike xy=105.009,62.9624 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0.560363 exit=6 goal=101.691,59.9909
+STALL t=238 id=86 kind=Motorbike xy=106.773,64.5298 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0.570237 exit=11 goal=101.822,60.0945
+STALL t=239 id=95 kind=Motorbike xy=108.206,66.5788 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=101.436,60.5148
+STALL t=240 id=100 kind=Motorbike xy=110.001,68.1862 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=7 goal=101.426,60.5062
+STALL t=240 id=102 kind=Motorbike xy=111.749,69.7524 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=101.39,60.4737
+PROGRESS t=240 inserted=265 completed=180 active=85 max_free_stop=0 wall=846.295
+STALL t=241 id=106 kind=Bike xy=113.352,71.1879 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=17 goal=101.266,60.3628
+STALL t=242 id=108 kind=Motorbike xy=114.875,72.552 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=16 goal=101.352,60.4394
+STALL t=243 id=112 kind=Motorbike xy=116.585,74.0836 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=7 goal=101.453,60.5303
+STALL t=244 id=125 kind=Motorbike xy=118.361,75.6747 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=6 goal=101.36,60.447
+STALL t=244 id=136 kind=Motorbike xy=120.065,77.2006 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=6 goal=101.445,60.5228
+STALL t=245 id=173 kind=Motorbike xy=121.797,78.7522 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=101.389,60.4727
+STALL t=246 id=188 kind=Motorbike xy=123.442,80.2255 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=6 goal=101.401,60.483
+STALL t=263 id=170 kind=Motorbike xy=73.0905,72.6252 free=0 lane=13 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.658192 junction_status=Crossing conflict or occupied exit buffer lateral=0.886925 exit=15 goal=73.0905,72.6252
+STALL t=275 id=167 kind=Motorbike xy=71.9834,70.9349 free=0 lane=13 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.658192 junction_status=Crossing conflict or occupied exit buffer lateral=-1.12751 exit=17 goal=71.9834,70.9349
+PROGRESS t=300 inserted=305 completed=232 active=73 max_free_stop=0 wall=1094.46
+PROGRESS t=360 inserted=352 completed=280 active=72 max_free_stop=0 wall=1321.57
+STALL t=367 id=204 kind=Motorbike xy=70.6802,69.3986 free=0 lane=12 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.658192 junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=15 goal=70.6802,69.3986
+STALL t=369 id=207 kind=Motorbike xy=68.9822,70.7115 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=9 goal=70.7992,69.3066
+STALL t=370 id=239 kind=Motorbike xy=67.3493,71.9741 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=70.7453,69.3483
+STALL t=371 id=245 kind=Motorbike xy=65.5207,73.388 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=17 goal=70.6854,69.3946
+STALL t=372 id=258 kind=Motorbike xy=63.6456,74.8379 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=9 goal=70.6987,69.3843
+STALL t=373 id=263 kind=Motorbike xy=61.7709,76.2874 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=16 goal=70.6868,69.3935
+STALL t=375 id=267 kind=Car xy=59.0104,78.4218 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=9 goal=69.8733,70.0225
+STALL t=375 id=295 kind=Motorbike xy=56.3212,80.5012 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=6 goal=70.7709,69.3285
+STALL t=379 id=313 kind=Motorbike xy=52.6852,83.3126 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=6 goal=70.7065,69.3783
+STALL t=380 id=298 kind=Motorbike xy=54.4691,81.9333 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=17 goal=70.703,69.381
+STALL t=384 id=316 kind=Motorbike xy=50.9008,84.6923 free=0 lane=12 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=16 goal=70.7025,69.3814
+STALL t=390 id=196 kind=Motorbike xy=71.903,70.9424 free=0 lane=13 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.659587 junction_status=Crossing conflict or occupied exit buffer lateral=-1.15556 exit=15 goal=71.903,70.9424
+PROGRESS t=420 inserted=397 completed=325 active=72 max_free_stop=0 wall=1538.11
+PROGRESS t=480 inserted=444 completed=373 active=71 max_free_stop=0 wall=1757.53
+STALL t=501 id=374 kind=Motorbike xy=91.9125,38.0773 free=0 lane=4 reason=Legal stop: waiting for clear turn exit reserved=0 heading=2.09887 junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=7 goal=91.9125,38.0773
+STALL t=509 id=386 kind=Motorbike xy=93.2681,36.0877 free=0 lane=4 reason=Unexplained stop: fleet recovery required reserved=0 heading=2.38907 junction_status=Recovery: short step blocked by traffic lateral=0 exit=17 goal=92.4621,37.1352
+STALL t=540 id=334 kind=Motorbike xy=72.6003,71.8831 free=0 lane=13 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.658192 junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=17 goal=72.6003,71.8831
+PROGRESS t=540 inserted=491 completed=420 active=71 max_free_stop=0 wall=1983.89
+PROGRESS t=600 inserted=552 completed=475 active=77 max_free_stop=0 wall=2186.12
+PROGRESS t=660 inserted=607 completed=527 active=80 max_free_stop=0 wall=2449.97
+STALL t=679 id=422 kind=Car xy=71.8593,72.4561 free=0 lane=13 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.658192 junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=16 goal=71.8593,72.4561
+STALL t=681 id=433 kind=Motorbike xy=69.1355,74.5622 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: signal blocks short step lateral=0 exit=16 goal=72.6009,71.8827
+STALL t=682 id=446 kind=Motorbike xy=67.1604,76.0893 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.5787,71.8998
+STALL t=683 id=450 kind=Motorbike xy=65.1502,77.6436 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.5578,71.916
+STALL t=684 id=464 kind=Motorbike xy=63.2474,79.1149 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.686,71.8168
+STALL t=685 id=516 kind=Motorbike xy=61.3816,80.5576 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=7 goal=72.6273,71.8623
+STALL t=686 id=521 kind=Motorbike xy=59.537,81.9839 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.6347,71.8566
+STALL t=687 id=527 kind=Motorbike xy=57.7192,83.3894 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=7 goal=72.6542,71.8415
+STALL t=688 id=571 kind=Motorbike xy=55.9064,84.791 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.6838,71.8186
+STALL t=691 id=574 kind=Motorbike xy=54.072,86.2094 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.6185,71.8691
+STALL t=691 id=579 kind=Motorbike xy=52.2151,87.6452 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=16 goal=72.6613,71.836
+STALL t=711 id=482 kind=Motorbike xy=68.3729,73.5916 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.659997 junction_status=Recovery: short step blocked by traffic lateral=-1.2 exit=7 goal=71.8506,70.8934
+PROGRESS t=720 inserted=652 completed=577 active=75 max_free_stop=0 wall=2711.54
+PROGRESS t=780 inserted=695 completed=624 active=71 max_free_stop=0 wall=2971.57
+PROGRESS t=840 inserted=739 completed=668 active=71 max_free_stop=0 wall=3188.8
+STALL t=855 id=567 kind=Motorbike xy=101.326,60.416 free=0 lane=8 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-2.41116 junction_status=Crossing conflict or occupied exit buffer lateral=0 exit=11 goal=101.326,60.416
+STALL t=858 id=605 kind=Motorbike xy=102.932,61.8551 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=17 goal=101.356,60.4434
+STALL t=858 id=610 kind=Motorbike xy=104.65,63.3937 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=7 goal=101.455,60.5317
+STALL t=859 id=624 kind=Motorbike xy=106.408,64.9684 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=16 goal=101.397,60.4795
+STALL t=860 id=628 kind=Motorbike xy=108.106,66.4886 free=0 lane=8 reason=Legal stop: vehicle ahead reserved=0 heading=-2.41116 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=101.375,60.4599
+PROGRESS t=900 inserted=785 completed=713 active=72 max_free_stop=0 wall=3346.68
+AT_DURATION seconds=900 completed=713 admitted=785 max_free_stop=24.225
+STALL t=923 id=585 kind=Motorbike xy=67.1785,76.0753 free=0 lane=13 reason=Legal stop: red / yellow signal reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=16 goal=72.679,71.8223
+STALL t=924 id=667 kind=Motorbike xy=65.5007,77.3727 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.658192 junction_status=Recovery: short step blocked by traffic lateral=0 exit=15 goal=72.6588,71.8379
+STALL t=925 id=672 kind=Motorbike xy=64.076,78.9898 free=0 lane=13 reason=Legal stop: vehicle ahead reserved=0 heading=-0.65745 junction_status=Recovery: short step blocked by traffic lateral=0.4 exit=16 goal=72.9359,72.149
+STALL t=947 id=734 kind=Bike xy=72.0099,70.7694 free=0 lane=13 reason=Legal stop: waiting for clear turn exit reserved=0 heading=-0.659675 junction_status=Crossing conflict or occupied exit buffer lateral=-1.2 exit=15 goal=72.0099,70.7694
+PROGRESS t=960 inserted=785 completed=759 active=26 max_free_stop=0 wall=3494.4
+PROGRESS t=1020 inserted=785 completed=774 active=11 max_free_stop=0 wall=3532.86
+SOURCE 0 rate=0.25 offered=225 inserted=169
+SOURCE 4 rate=0.25 offered=225 inserted=151
+SOURCE 6 rate=0.16 offered=144 inserted=55
+SOURCE 10 rate=1 offered=900 inserted=139
+SOURCE 15 rate=1 offered=900 inserted=174
+SOURCE 16 rate=1 offered=900 inserted=97
+DONE seconds=1064.67 completed=785 admitted=785 min_clearance=0.120177 max_free_stop=24.225

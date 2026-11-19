@@ -14,6 +14,9 @@ double front(const Footprint& box,Vec2 origin,Vec2 forward) {
 }
 }
 bool Simulation::spreadAtSignal(Entity& e) {
+    // Native lanes and crossings own their committed path and sublane slots.
+    // The legacy free-mask spreader can replace that path with an RTS detour.
+    if(flow_.predictiveJunctions && !e.networkRoute.empty()) return false;
     if(e.signalLight==-2 || e.reversing) return false;
     if(e.signalLight>=0 && e.next<e.path.size()) return false;
     double nearest=0; Vec2 intersection;

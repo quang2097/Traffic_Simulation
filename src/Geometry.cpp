@@ -75,6 +75,9 @@ bool closerThan(const Polygon& a,const Polygon& b,double clearance) {
     auto x=bounds(a),y=bounds(b);
     double dx=std::max({0.0,x[0]-y[2],y[0]-x[2]}),dy=std::max({0.0,x[1]-y[3],y[1]-x[3]});
     if(dx*dx+dy*dy>=clearance*clearance) return false;
+    // Near contact, tiny body steps can make the iterative disk test report a
+    // false overlap. Exact edge distances are cheap for two small footprints.
+    if(a.size()<=12 && b.size()<=12) return distance(a,b)<clearance;
     // GJK on (A - B) expanded by a clearance disk. Curved reservations can
     // have hundreds of hull vertices: SAT + all edge pairs is quadratic,
     // while support queries here scan each hull only a handful of times.
@@ -168,13 +171,19 @@ bool fits(const Map& map,const Polygon& poly,double padding) {
     if(minX<0 || minY<0 || maxX>map.width*s || maxY>map.height*s) return false;
     if(!map.hasWalls(std::max(0,static_cast<int>(std::floor(minX/s))),std::max(0,static_cast<int>(std::floor(minY/s))),
         std::min(map.width-1,static_cast<int>(std::floor(maxX/s))),std::min(map.height-1,static_cast<int>(std::floor(maxY/s))))) return true;
-    for(int y=std::max(0,static_cast<int>(std::floor(minY/s)));y<=std::min(map.height-1,static_cast<int>(std::floor(maxY/s)));++y)
-        for(int x=std::max(0,static_cast<int>(std::floor(minX/s)));x<=std::min(map.width-1,static_cast<int>(std::floor(maxX/s)));++x) {
-            if(map.walkable({x,y})) continue;
-            Polygon wall{{x*s,y*s},{(x+1)*s,y*s},{(x+1)*s,(y+1)*s},{x*s,(y+1)*s}};
-            if(distance(poly,wall)<=padding+1e-9) return false;
-        }
-    return true;
+    // Empty rectangles and wall regions outside the swept polygon can be
+    // skipped as blocks. At a leaf this uses the original exact pixel test.
+    auto clearRegion=[&](auto&& self,int x0,int y0,int x1,int y1)->bool {
+        if(!map.hasWalls(x0,y0,x1,y1)) return true;
+        Polygon region{{x0*s,y0*s},{(x1+1)*s,y0*s},{(x1+1)*s,(y1+1)*s},{x0*s,(y1+1)*s}};
+        double separation=distance(poly,region);
+        if(x0==x1 && y0==y1) return separation>padding+1e-9;
+        if(separation>padding+1e-8) return true;
+        if(x1-x0>=y1-y0) {int middle=(x0+x1)/2;return self(self,x0,y0,middle,y1) && self(self,middle+1,y0,x1,y1);}
+        int middle=(y0+y1)/2;return self(self,x0,y0,x1,middle) && self(self,x0,middle+1,x1,y1);
+    };
+    return clearRegion(clearRegion,std::max(0,static_cast<int>(std::floor(minX/s))),std::max(0,static_cast<int>(std::floor(minY/s))),
+        std::min(map.width-1,static_cast<int>(std::floor(maxX/s))),std::min(map.height-1,static_cast<int>(std::floor(maxY/s))));
 }
 bool intersectsLine(const Polygon& polygon,Vec2 a,Vec2 b) { return distance(polygon,{a,b})<=1e-8; }
 }

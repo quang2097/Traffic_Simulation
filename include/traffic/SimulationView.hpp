@@ -13,6 +13,9 @@ public:
 private:
     void reset();
     void controls();
+    void menuBar();
+    void fileAction(int action);
+    int workspace_=0;
     void canvas();
     void inspector();
     void refreshMap(bool pauseTraffic,bool importSignals=false);
@@ -28,6 +31,7 @@ private:
     std::vector<int> pathNodes_;
     std::vector<double> nodeSpawnClocks_;
     std::vector<int> laneOriginNodes_;
+    bool splittingRoad_=false;
     bool drawingRoad_=false;
     int newRoadType_=2,newRoadLanes_=2;
     std::vector<Vec2> roadDraft_;
@@ -40,7 +44,7 @@ private:
     Simulation simulation_;
     RoutingSettings routing_;
     TrafficFlowSettings flow_{true,true,.4,.15};
-    StuckVehicleSettings stuckVehicleSettings_;
+    StuckVehicleSettings stuckVehicleSettings_{true,30,true,60};
     TrafficRecoverySettings trafficRecoverySettings_;
     UrbanTrafficSettings urbanTraffic_;
     TugSettings tugSettings_;

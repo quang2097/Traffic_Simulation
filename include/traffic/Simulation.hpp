@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <random>
 #include <string>
 #include <vector>
@@ -100,6 +101,8 @@ struct TrafficFlowSettings {
 struct StuckVehicleSettings {
     bool enabled=true;
     double timeoutSeconds=30;
+    bool junctionEnabled=false;
+    double junctionTimeoutSeconds=60;
 };
 struct TrafficRecoverySettings {
     bool enabled=true;
@@ -174,6 +177,7 @@ struct MotionPath {
 // replans use a tangent-continuous Bezier connector from the current pose.
 MotionPath curvePath(const Map& map,const Footprint& pose,const std::vector<Vec2>& waypoints,double initialConnectorLimit=0,const std::vector<double>& smoothing={});
 struct Entity {
+    int spawnLane=-1,spawnNode=-1; // Immutable trip origin; current lane may change.
     double sublaneAfter=0,lateralOffset=0;
     std::string sublaneStatus="centered";
     std::vector<PathManeuver> sublaneReservation;
@@ -210,9 +214,11 @@ struct Entity {
     std::uint64_t routeRevision=0,yieldToVehicle=0,exitWaitFor=0;
     double turnRequestSince=-1,turnRetryAfter=0;
     bool clearingTurn=false;
+    std::string junctionStatus;
     bool turnExitBlocked=false;
     std::size_t blockedTurnEntry=0;
     double stoppedSeconds=0,currentStopSeconds=0,longestStopSeconds=0,ageSeconds=0;
+    double junctionStationarySeconds=0;
     double stuckSeconds=0;
     double movingSinceRefresh=0;
     bool cooperativeRecovery=false;
@@ -261,6 +267,20 @@ struct StopStatistics {
     std::uint64_t vehicles=0,vehiclesThatStopped=0;
     double totalSeconds=0,meanSeconds=0,minSeconds=0,maxSeconds=0;
 };
+struct QueueDetector {
+    Vec2 a,b;
+    std::uint64_t id=0;
+};
+struct QueueDetectorStatus {
+    std::uint64_t id=0;
+    bool occupied=false;
+    double occupiedPercent=0,observedSeconds=0;
+};
+struct TrafficLightQueueStatus {
+    std::uint64_t lightId=0;
+    int qualityLine=0; // 1-based highest qualifying line; 0 means none.
+    std::vector<QueueDetectorStatus> lines;
+};
 struct TrafficLight {
     Vec2 a,b; // Finite stop line in meters; controls crossings from both sides.
     double greenSeconds=10,yellowSeconds=2,redSeconds=12,offsetSeconds=0;
@@ -268,6 +288,8 @@ struct TrafficLight {
     bool permissive=false;
     Vec2 allowedA,allowedB; // Linked route-crossing gate; not a physical barrier.
     std::uint64_t id=0;
+    double queueWindowSeconds=30,queueThresholdPercent=50;
+    std::vector<QueueDetector> queueDetectors; // Order: nearest to farthest upstream.
     LightPhase phase(double simulationSeconds) const;
 };
 class Simulation {
@@ -356,6 +378,10 @@ public:
     void setStuckVehicleSettings(StuckVehicleSettings settings);
     const StuckVehicleSettings& stuckVehicleSettings() const { return stuckVehicleSettings_; }
     std::uint64_t removedStuckVehicles() const { return removedStuckVehicles_; }
+    std::uint64_t removedJunctionVehicles() const { return removedJunctionVehicles_; }
+    std::uint64_t removedQueueBlockers() const { return removedStuckVehicles_-removedJunctionVehicles_; }
+    std::size_t openJunctionVehicles() const;
+    TrafficLightQueueStatus trafficLightQueueStatus(std::uint64_t lightId) const;
     std::uint64_t lastRemovedStuckVehicle() const { return lastRemovedStuckVehicle_; }
     std::uint64_t destinationRefreshes() const { return destinationRefreshes_; }
     std::uint64_t destinationRefreshAttempts() const { return destinationRefreshAttempts_; }
@@ -365,6 +391,17 @@ private:
     bool fitsLaneRoute(const Footprint&,const Entity&) const;
     void advance(double seconds);
     void clearStuckVehicles();
+    void updateTrafficMonitoring(double seconds);
+    void reconcileQueueDetectors();
+    struct DetectorSample { double seconds; bool occupied; };
+    struct DetectorHistory {
+        std::uint64_t lightId=0,id=0;
+        Vec2 a,b;
+        double window=0,threshold=0,observed=0,occupiedTime=0;
+        bool occupied=false;
+        std::deque<DetectorSample> samples;
+    };
+    std::vector<DetectorHistory> detectorHistories_;
     bool refreshMovingRoute();
     void recordFinishedStopTime(const Entity& entity);
     bool feasible(const Footprint& from,const Footprint& to,const Entity& entity,bool traffic,bool reservations=true) const;
@@ -375,6 +412,7 @@ private:
     bool prepareJunctionPlans(Entity& entity);
     bool advancePredictiveVehicle(Entity& entity,double dt);
     bool predictiveAdmission(const Entity& entity,int link,const std::vector<Vec2>& movement) const;
+    bool parallelDeparture(const Entity& a,const Entity& b) const;
     void updateSublanes();
     bool advanceNetworkStage(Entity& entity);
     void updateLaneChanges();
@@ -448,6 +486,7 @@ private:
     std::uint64_t completedThatStopped_=0;
     StuckVehicleSettings stuckVehicleSettings_;
     std::uint64_t removedStuckVehicles_=0,lastRemovedStuckVehicle_=0;
+    std::uint64_t removedJunctionVehicles_=0;
     double nextStuckCheck_=0,removeStuckAfter_=0;
     std::uint64_t destinationRefreshes_=0,destinationRefreshAttempts_=0;
     double seconds_=0;

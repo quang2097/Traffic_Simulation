@@ -1,0 +1,4 @@
+Post-soak final-build check (one CTest integration case running in the background):
+reference_s=0.282171 optimized_s=0.0227054 speedup=12.4275 exact_matches=2000
+All 2000 sampled footprints on Wassup6.png at 0.074 m/pixel matched the original pixel-loop query.
+Timing applies only to these mask queries, not total simulation or UI performance.

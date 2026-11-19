@@ -1,0 +1,56 @@
+{
+  "measured_batch_controller": "comparison in summary.json; before the lane-edge follow-up",
+  "final_followup_full_five_seed_rerun": false,
+  "replay_duration_limit_seconds": 120,
+  "audit": "1 Hz footprint/mask and preferred clearance audits; normal swept checks per physics step",
+  "trials": [
+    {
+      "seed": 123,
+      "reconstruction": "all stopped; unrecorded claims/cooldowns cleared; new sublane/lane-change searches disabled; in-progress merge inferred",
+      "control": {
+        "replay_seconds": 120.0,
+        "completed": 0,
+        "remaining": 28,
+        "violations": 0,
+        "deleted": 0
+      },
+      "final": {
+        "replay_seconds": 96.2167,
+        "completed": 28,
+        "remaining": 0,
+        "violations": 0,
+        "deleted": 0
+      }
+    },
+    {
+      "seed": 1024,
+      "reconstruction": "all stopped; unrecorded claims/cooldowns cleared; new sublane/lane-change searches disabled; in-progress merge inferred",
+      "control": {
+        "replay_seconds": 120.0,
+        "completed": 0,
+        "remaining": 23,
+        "violations": 0,
+        "deleted": 0
+      },
+      "final": {
+        "replay_seconds": 77.3417,
+        "completed": 23,
+        "remaining": 0,
+        "violations": 0,
+        "deleted": 0
+      }
+    }
+  ],
+  "final_source_sha256": {
+    "Simulation.cpp": "f73873590d9a3c0b46d17f35531b80bb7e9a755fec69592b25e7a9586d446d9d",
+    "HybridTraffic.cpp": "ad14c53efd181248ae2ac5068854e101e4e80e5e77ad817147a1b7e459287d63",
+    "TrafficFlow.cpp": "29e0e0d2cb81146b8da7c8219c5d396e5ca4619a7e4885441744e4c7b8001c5e",
+    "Lanes.cpp": "ac8b73c034d379535d17b33295377986cbee68356d36a4fe9b98c0a027318070",
+    "Geometry.cpp": "bda617fe59da700a541d3bb9e1ad9a6b7f6c705c8bb6f3c448fe630870e68daf",
+    "SignalQueue.cpp": "aa3f5aadf2e59d2f645a085b9db999e6632a3dc187ec7a9b3459bde23fdbfab7",
+    "SignalApproach.cpp": "a2b3494aab521abdfb2e17d8f6c2c9badf1af7d493fc39edc4ff70ca278acf67"
+  },
+  "final_executable_sha256": "b2fe68d49203664badca9d48f68a4df34419a1fa999cd4572531d077ea3b3629",
+  "final_soak_executable_sha256": "f9d1d28f1692c7fe6a73cc386bf580fe52ad773d5f16de7da76a2f08092d19d7",
+  "replay_script_sha256": "be9aff79979754acf95757a36a8d113b9409078c8436068f4f2872d4ae584b91"
+}

@@ -102,10 +102,12 @@ CompiledRoads compileRoads(const NodeGraph& graph) {
         int junction=junctionAt(incoming.to);
         if(junction!=junctionAt(outgoing.from) || incoming.lane==outgoing.lane) continue;
         bool open=graph.nodes[junction].openRadius>0;
-        if(!open && (incoming.road==outgoing.road || incoming.out.x*outgoing.in.x+incoming.out.y*outgoing.in.y<-.8)) continue;
+        bool uturn=incoming.road==outgoing.road || incoming.out.x*outgoing.in.x+incoming.out.y*outgoing.in.y<-.8;
+        if(!open && uturn && !graph.nodes[junction].allowUTurn) continue;
         auto start=result.lanes[incoming.lane].points.back(),end=result.lanes[outgoing.lane].points.front();
         if(length(end-start)<.05) { result.lanes[incoming.lane].successors.push_back(outgoing.lane); continue; }
         double handle=length(end-start)*std::clamp(graph.connections[incoming.road].smoothing*.25,.1,.8);
+        if(uturn && !open) handle=std::max(handle,length(end-start)*.8);
         auto b=start+incoming.out*handle,c=end-outgoing.in*handle;
         double incomingWidth=result.lanes[incoming.lane].pointWidths.back(),outgoingWidth=result.lanes[outgoing.lane].pointWidths.front();
         DirectedLane link; link.width=std::min(incomingWidth,outgoingWidth);

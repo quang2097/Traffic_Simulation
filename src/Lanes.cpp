@@ -218,7 +218,12 @@ bool Simulation::fitsLaneRoute(const Footprint& f,const Entity& e) const {
                 // A rigid body sweeps outside a curved junction centreline.
                 // This allowance belongs to internal links, never road lanes.
                 if(!e.networkRoute.empty() && lane.roadGroup<0 && !lane.entry && lane.openJunction<0) width+=e.length;
-                if(length(p-(lane.points[i-1]+d*t))<=width*.5+1e-7) inside=true;
+                // Nominal lane edges are not physical walls. Half a mask
+                // pixel (at most 5 cm) bridges sampling scallops on curved,
+                // tapered roads; the mask, dividers and pair gaps stay hard.
+                double edgeTolerance=flow_.predictiveJunctions && !e.networkRoute.empty() && lane.roadGroup>=0?
+                    std::min(.05,map_.metersPerPixel*.5):0.;
+                if(length(p-(lane.points[i-1]+d*t))<=width*.5+edgeTolerance+1e-7) inside=true;
             }
             if(inside) break;
         }
@@ -230,6 +235,7 @@ bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
     if(id<0 || id>=static_cast<int>(lanes_.size())) return false;
     for(const auto& other:entities_) if(other.inOpenJunction && other.networkStage+1<other.networkRoute.size() && other.networkRoute[other.networkStage+1]==id) return false;
     const auto& p=profile(kind); Entity e; e.id=nextId_; e.kind=kind;
+    e.spawnLane=id; e.spawnNode=lanes_[id].sourceNode;
     e.length=sample(p.length,.2,30); e.width=sample(p.width,.15,5); e.preferredDistance=sample(p.distance,0,20); e.massKg=defaultVehicleMass(kind); sampleMotion(e);
     if(lanes_[id].width<e.width+.05) return false;
     std::vector<double> costs(lanes_.size(),1e100); std::vector<int> parent(lanes_.size(),-1);
@@ -243,8 +249,8 @@ bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
         for(int next:lanes_[node].successors) {
             if(lanes_[next].width<e.width+.05) continue;
             double distance=0; const auto& lane=lanes_[next]; for(std::size_t i=1;i<lane.points.size();++i) distance+=length(lane.points[i]-lane.points[i-1]);
-            double congestion=0; for(const auto& actor:entities_) if(std::find(actor.laneRoute.begin(),actor.laneRoute.end(),next)!=actor.laneRoute.end()) congestion+=1;
-            double candidate=cost+(distance/lane.speedLimit+congestion)*std::uniform_real_distribution<double>(.9,1.1)(random_);
+            // Destinations remain random; the route to the selected destination is shortest by distance.
+            double candidate=cost+distance;
             if(candidate<costs[next]) { costs[next]=candidate; parent[next]=node; queue.push({candidate,next}); }
         }
     }
@@ -263,7 +269,7 @@ bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
                 if(!feasible(e.footprint(),e.footprint(),e,true,false)) return false;
                 // Exact preferred-gap contact leaves no room for the tiny
                 // heading changes of a continuous lane/junction handoff.
-                for(const auto& other:entities_) if(clearance(e.footprint(),other.footprint())<std::min(e.preferredDistance,other.preferredDistance)+.02) return false;
+                for(const auto& other:entities_) if(clearance(e.footprint(),other.footprint())<std::max(std::min(e.preferredDistance,other.preferredDistance),flow_.lateralGap)+.02) return false;
                 return true;
             };
             bool placed=insertable();

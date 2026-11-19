@@ -21,6 +21,89 @@ Vec2 along(const std::vector<Vec2>& points,double distance,Vec2& direction) {
     for(std::size_t i=1;i<points.size();++i) { auto d=points[i]-points[i-1]; double n=length(d); direction=unit(d); if(n>=distance) return points[i-1]+direction*distance; distance-=n; }
     return points.back();
 }
+// Build one forward-only curve rather than refitting hundreds of sampled
+// guide points (which can introduce loops near a tight exit).
+MotionPath crossingPath(const Map& map,const std::vector<DirectedLane>& lanes,const Entity& e,const Entity& target) {
+    Vec2 forward{std::cos(e.heading),std::sin(e.heading)},out=target.exitDirection;
+    double turn=std::abs(angleDelta(e.heading,std::atan2(out.y,out.x)));
+    double lead=(turn>.05 || std::abs(e.lateralOffset)>.01)?e.length*1.5+1:0;
+    // Stop lines on neighboring lanes may be staggered. Clear the farthest
+    // nearby parallel row with the rear bumper before starting any turn.
+    if(lead>0) for(const auto& lane:lanes) if(lane.roadGroup>=0 && lane.openJunction<0 &&
+        length(lane.points.back()-target.junctionCenter)<=target.junctionRadius+1) {
+        auto direction=unit(lane.points.back()-lane.points[lane.points.size()-2]);
+        Vec2 side{-forward.y,forward.x};auto delta=lane.points.back()-e.center;
+        if(dot(direction,forward)>.95 && std::abs(dot(delta,side))<(lane.width+e.width+e.length)*.5+e.preferredDistance+.5)
+            lead=std::max(lead,dot(delta,forward)+e.length*.5+.2);
+    }
+    Vec2 a=e.center+forward*lead,end=target.goal;
+    if(turn>3.0) end=end+forward*std::max(0.,dot(a-end,forward));
+    double distance=length(end-a),best=1e100;
+    MotionPath chosen;
+    for(double factor:{.25,.4,.55,.75,1.,1.4,2.}) {
+        double handle=std::max(e.length*1.2,distance*factor);
+        Vec2 b=a+forward*handle,c=end-out*handle;
+        MotionPath trial;trial.points={e.center};trial.headings={e.heading};
+        auto previous=e.footprint(); bool valid=true; double total=0,rotation=0;
+        auto append=[&](Vec2 p,double h) {
+            double d=length(p-previous.center),angle=std::abs(angleDelta(previous.heading,h));
+            if(d<1e-9) return angle<.001;
+            if(angle/d>1/std::max(1.,e.length*.65)) return false;
+            auto pose=previous;pose.center=p;pose.heading=h;double pad;auto swept=geometry::swept(previous,pose,pad);
+            if(!geometry::fits(map,swept,pad)) return false;
+            // Incoming road corridors may be crossed, but never followed upstream.
+            for(const auto& lane:lanes) if(lane.roadGroup>=0 && lane.openJunction<0) {
+                for(std::size_t i=1;i<lane.points.size();++i) {
+                    auto delta=lane.points[i]-lane.points[i-1];double n=length(delta);if(n<1e-8)continue;auto direction=delta*(1/n);
+                    // A free crossing may traverse the junction, not cut across
+                    // another incoming queue behind its stop line. Even a nearly
+                    // perpendicular car can otherwise clip a parked row with its
+                    // nose. The initial straight prefix may clear its own row.
+                    bool incoming=length(lane.points.back()-target.junctionCenter)<=target.junctionRadius+1;
+                    auto entryDirection=unit(lane.points.back()-lane.points[lane.points.size()-2]);
+                    Vec2 bodyForward{std::cos(h),std::sin(h)},bodySide{-std::sin(h),std::cos(h)};
+                    bool clearingRow=dot(entryDirection,forward)>.95 && std::abs(angleDelta(e.heading,h))<.002;
+                    if(incoming && !clearingRow) {
+                        Vec2 side{-direction.y,direction.x};
+                        double halfAlong=std::abs(dot(bodyForward,direction))*e.length*.5+std::abs(dot(bodySide,direction))*e.width*.5;
+                        double halfAcross=std::abs(dot(bodyForward,side))*e.length*.5+std::abs(dot(bodySide,side))*e.width*.5;
+                        double projection=dot(p-lane.points[i-1],direction);
+                        double wa=lane.pointWidths.size()==lane.points.size()?lane.pointWidths[i-1]:lane.width;
+                        double wb=lane.pointWidths.size()==lane.points.size()?lane.pointWidths[i]:lane.width;
+                        if(projection>=-halfAlong-.08 && projection<=n+halfAlong+.08 &&
+                           std::abs(dot(p-lane.points[i-1],side))<std::max(wa,wb)*.5+halfAcross+.08) {
+                            geometry::Polygon corridor{lane.points[i-1]+side*(wa*.5),lane.points[i]+side*(wb*.5),
+                                lane.points[i]-side*(wb*.5),lane.points[i-1]-side*(wa*.5)};
+                            if(geometry::violatesClearance(corners(pose),corridor,.08))return false;
+                        }
+                    }
+                    if(dot(direction,bodyForward)>=-.25)continue;
+                    double along=dot(p-lane.points[i-1],direction);
+                    double mouth=0;
+                    if(i+1==lane.points.size() && length(lane.points.back()-target.junctionCenter)<=target.junctionRadius+1)
+                        mouth=e.length+e.preferredDistance+.5;
+                    // A queue's nose extends beyond the centerline endpoint.
+                    // Protect that mouth as well as the lane interior, or a
+                    // crossing can stop nose-to-nose just outside the road.
+                    if(along<0 || along>n+mouth)continue;
+                    double width=lane.pointWidths.size()==lane.points.size()?std::max(lane.pointWidths[i-1],lane.pointWidths[i]):lane.width;
+                    Vec2 sideways{-direction.y,direction.x};
+                    double across=std::abs(dot(bodyForward,sideways))*e.length*.5+std::abs(dot(bodySide,sideways))*e.width*.5;
+                    // An angled car's nose occupies much more than its width.
+                    // Keep the full rotated body out of an opposing approach.
+                    if(std::abs(dot(p-lane.points[i-1],sideways))<width*.5+across+.1) return false;
+                }
+            }
+            total+=d;rotation+=angle;trial.points.push_back(p);trial.headings.push_back(h);previous=pose;return true;
+        };
+        if(lead>0 && !append(a,e.heading)) continue;
+        int samples=std::max(40,static_cast<int>(std::ceil((length(b-a)+length(c-b)+length(end-c))/.2)));
+        for(int i=1;i<=samples && valid;++i) {double t=static_cast<double>(i)/samples,u=1-t;auto tangent=(b-a)*(3*u*u)+(c-b)*(6*u*t)+(end-c)*(3*t*t);if(length(tangent)<1e-8){valid=false;break;}valid=append(a*(u*u*u)+b*(3*u*u*t)+c*(3*u*t*t)+end*(t*t*t),std::atan2(tangent.y,tangent.x));}
+        if(valid && length(end-target.goal)>1e-8) valid=append(target.goal,std::atan2(out.y,out.x));
+        if(valid && rotation<=turn+.45 && total<best) {best=total;chosen=std::move(trial);}
+    }
+    return chosen;
+}
 }
 bool Simulation::prepareJunctionPlans(Entity& e) {
     const auto spawnRandom=random_;
@@ -36,6 +119,12 @@ bool Simulation::prepareJunctionPlans(Entity& e) {
             auto forward=unit(direction); preview.center=preview.center+Vec2{-forward.y,forward.x}*e.lateralOffset;
         }
         preview.heading=std::atan2(direction.y,direction.x);
+        // A curved/tapered sublane merge can finish at a different tangent
+        // from the raw centerline. Validate the exact future handoff pose.
+        if(stage==e.networkStage+1 && !e.inOpenJunction && e.signalLight==-1 &&
+           !e.path.empty() && e.pathHeadings.size()==e.path.size()) {
+            preview.center=e.path.back(); preview.heading=e.pathHeadings.back();
+        }
         if(!installNetworkStage(preview,stage)) { random_=spawnRandom; return false; }
         auto previous=preview.footprint();
         for(std::size_t i=1;i<preview.path.size();++i) {
@@ -96,7 +185,10 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
         if(stage+1<e.networkRoute.size()) candidate.laneRoute.push_back(e.networkRoute[stage+1]);
         auto nearest=project(lane.points,e.center);
         for(std::size_t i=nearest.first;i<lane.points.size();++i) if(length(guide.back()-lane.points[i])>.05) guide.push_back(lane.points[i]);
-        if(stage+1==e.networkRoute.size()) {
+        // An approach ends at its stop line with the front bumper, not the
+        // center. A bus parked center-on-node otherwise projects half its body
+        // into the crossing and traps a shorter neighbor that has begun turning.
+        if(stage+1==e.networkRoute.size() || lanes_[e.networkRoute[stage+1]].openJunction>=0) {
             double margin=e.length*.5+.2;
             while(guide.size()>1) { auto d=guide.back()-guide[guide.size()-2]; double n=length(d); if(n>margin+.1) { guide.back()=guide.back()-unit(d)*margin; break; } margin-=n; guide.pop_back(); }
         }
@@ -128,6 +220,12 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
         candidate.path.front()=e.center; candidate.pathHeadings.front()=e.heading;
         candidate.next=1; candidate.segmentProgress=0; ++candidate.routeRevision;
         candidate.reservationEnd=0; candidate.following=false; candidate.cooperativeRecovery=false;
+    } else if(lane.openJunction>=0 && stage+1<e.networkRoute.size()) {
+        auto motion=crossingPath(map_,lanes_,e,candidate);
+        if(motion.points.empty()) return false;
+        candidate.path=std::move(motion.points); candidate.pathHeadings=std::move(motion.headings); candidate.maneuvers.clear();
+        candidate.next=1;candidate.segmentProgress=0;++candidate.routeRevision;
+        candidate.reservationEnd=0;candidate.following=false;candidate.cooperativeRecovery=false;
     } else if(!installPath(candidate,std::move(guide),std::max(4.,e.length*2))) {
         if(lane.openJunction<0) return false;
         auto alternative=plan(candidate,0,false);
@@ -172,19 +270,56 @@ bool Simulation::junctionAdmission(const Entity& e,int linkId,const std::vector<
     return true;
 }
 bool Simulation::advanceNetworkStage(Entity& e) {
-    if(e.signalLight!=-1 || e.reversing) return false;
-    if(e.networkRoute.empty() || e.next<e.path.size() || e.networkStage+1>=e.networkRoute.size()) return false;
+    if(e.signalLight!=-1 || e.reversing) { e.junctionStatus="Signal queue or reversing"; return false; }
+    if(e.networkRoute.empty() || e.networkStage+1>=e.networkRoute.size()) return false;
     int next=e.networkRoute[e.networkStage+1];
+    if(e.next<e.path.size()) {
+        // A tiny final alignment at the stop line can demand an impossible
+        // rotation between two packed neighbors. Rebuild the crossing from
+        // the actual pose rather than insisting on that artificial waypoint.
+        if(e.currentStopSeconds<2 || lanes_[next].openJunction<0 || stopReason(e)==StopReason::Signal) return false;
+        // A rigid body's steering clearance scales with its size. A fixed
+        // half-meter tolerance still strands a leading bike about 0.7 m short.
+        double handoffDistance=std::clamp(e.length*.5,.5,2.);
+        double remaining=0;auto previous=e.center;
+        for(std::size_t i=e.next;i<e.path.size();++i){remaining+=length(e.path[i]-previous);previous=e.path[i];if(remaining>handoffDistance)return false;}
+    }
     if(lanes_[next].openJunction>=0) {
         if(seconds_<e.junctionRetryAfter) return false;
         Entity candidate=e;
-        if(!installNetworkStage(candidate,e.networkStage+1)) { e.junctionRetryAfter=seconds_+1; e.waitingForJunction=true; e.turnExitBlocked=true; e.speed=0; return false; }
+        if(!installNetworkStage(candidate,e.networkStage+1)) { e.junctionStatus="No feasible crossing from current pose"; e.junctionRetryAfter=seconds_+1; e.waitingForJunction=true; e.turnExitBlocked=true; e.speed=0; return false; }
+        // Cache this exact motion for retries and for the admission forecast.
+        e.admissionPlan={candidate.path,candidate.pathHeadings,candidate.maneuvers};
+        // A clear first step is insufficient: a long straight lead can stop
+        // against an adjacent approach queue before its turn begins. Validate
+        // the entire committed crossing against current road bodies so that
+        // those queues can enter before we occupy their departure corridor.
+        if(flow_.predictiveJunctions && candidate.path.size()>1) {
+            bool blocked=false;
+            for(const auto& other:entities_) if(other.id!=e.id && !other.inOpenJunction) {
+                double gap=std::min(e.preferredDistance,other.preferredDistance);
+                auto from=e.footprint();
+                for(std::size_t i=1;i<candidate.path.size();++i) {
+                    auto to=from;to.center=candidate.path[i];to.heading=candidate.pathHeadings[i];
+                    double reach=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+gap+length(to.center-from.center);
+                    if(length(other.center-from.center)<=reach &&
+                       !geometry::motionClearance(from,to,other.footprint(),gap,e.cooperativeRecovery)){blocked=true;break;}
+                    from=to;
+                }
+                if(blocked)break;
+            }
+            if(blocked) {
+                e.junctionStatus="Crossing corridor occupied by road traffic";e.junctionRetryAfter=seconds_+.15;
+                e.waitingForJunction=e.next>=e.path.size();e.turnExitBlocked=e.waitingForJunction;e.speed=0;return false;
+            }
+        }
         if(!junctionAdmission(e,next,candidate.path)) {
+            e.junctionStatus="Crossing conflict or occupied exit buffer";
             e.admissionPlan={candidate.path,candidate.pathHeadings,candidate.maneuvers};
             e.junctionRetryAfter=seconds_+.15;
             e.waitingForJunction=true; e.turnExitBlocked=true; e.speed=0; return false;
         }
-        e=std::move(candidate); ++junctionAdmissions_; return true;
+        e=std::move(candidate); e.junctionStatus.clear(); ++junctionAdmissions_; return true;
     }
     bool leaving=e.inOpenJunction;
     if(!installNetworkStage(e,e.networkStage+1)) { e.speed=0; return false; }
@@ -197,6 +332,10 @@ void Simulation::updateLaneChanges() {
         if(e.reservesSublaneGap()) continue;
         if(e.changingLanes) {
             if(dot(e.center-e.laneChangeEnd,e.laneChangeDirection)>e.length*.5) {
+                Entity settled=e;settled.changingLanes=false;settled.changingFrom=settled.changingTo=-1;
+                settled.laneRoute={e.networkRoute[e.networkStage]};
+                if(e.networkStage+1<e.networkRoute.size())settled.laneRoute.push_back(e.networkRoute[e.networkStage+1]);
+                if(!fitsLaneRoute(e.footprint(),settled)) {e.laneChangeStatus="Finishing alignment with target lane";continue;}
                 e.changingLanes=false; e.changingFrom=e.changingTo=-1;
                 e.laneRoute={e.networkRoute[e.networkStage]}; if(e.networkStage+1<e.networkRoute.size()) e.laneRoute.push_back(e.networkRoute[e.networkStage+1]);
             } else continue;

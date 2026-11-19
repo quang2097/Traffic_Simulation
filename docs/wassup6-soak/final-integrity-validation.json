@@ -1,0 +1,18 @@
+{
+  "all_match": true,
+  "checks": {
+    "C:\\Users\\Uokbr\\Downloads\\Wassup6.png": true,
+    "C:\\Users\\Uokbr\\Downloads\\Node_network_2.nodes": true,
+    "C:\\Users\\Uokbr\\Downloads\\Node_network_2.nodes.signals": true,
+    "src/Simulation.cpp": true,
+    "src/HybridTraffic.cpp": true,
+    "src/TrafficFlow.cpp": true,
+    "src/Lanes.cpp": true,
+    "src/Geometry.cpp": true,
+    "src/SignalQueue.cpp": true,
+    "src/SignalApproach.cpp": true,
+    "build/traffic_wassup6.exe": true,
+    "build/map_soak.exe": true,
+    "scripts/replay-soak-snapshot.py": true
+  }
+}

@@ -1,0 +1,6 @@
+destination 2: UNREACHABLE
+destination 6: reachable
+destination 9: reachable
+destination 10: reachable
+destination 13: reachable
+destination 16: reachable

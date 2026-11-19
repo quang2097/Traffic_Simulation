@@ -1,6 +1,6 @@
 # Traffic Simulation
 
-**Current native interface:** open `build/traffic_capacity.exe`. Junction admission now samples conflicts more frequently while preserving its original safety margin, and independent crossings can continue past a stopped stream. Spawn rates, map scale and signal timings accept typed values. Each spawn node can exclude itself as the destination for its own new trips. See [controls and measured capacity](docs/JUNCTION_CAPACITY.md), [startup queue fixes](docs/STARTUP_JUNCTION_FIX.md) and [native lane editing](docs/NATIVE_LANES.md). The SUMO workflow below is retained as an optional legacy export path.
+**Current native interface:** [Shortest routing and wide forward turns](docs/ROUTING_GEOMETRY.md). [Mixed-direction junction tools](docs/JUNCTION_CONNECTIONS.md), design-style workspaces and the File menu are described in [the interface guide](docs/INTERFACE.md). Open `build/traffic_wassup6.exe`. See the [Wassup6 five-seed soak and repairs](docs/WASSUP6_SOAK.md) for the 0.074 m/pixel test case. Junction admission now samples conflicts more frequently while preserving its original safety margin, and independent crossings can continue past a stopped stream. Spawn rates, map scale and signal timings accept typed values. Each spawn node can exclude itself as the destination for its own new trips. See [controls and measured capacity](docs/JUNCTION_CAPACITY.md), [startup queue fixes](docs/STARTUP_JUNCTION_FIX.md) and [native lane editing](docs/NATIVE_LANES.md). The SUMO workflow below is retained as an optional legacy export path.
 
 **Wassup5 road setup and real SUMO:** use `build/traffic_roads.exe` → **Load Wassup5 road preset** → **Build and open real SUMO**. The preset uses 0.73 m/pixel and the confirmed one-way/two-way layout. The editor now sketches multi-lane one-way/two-way roads, generates junction connections, and exports runnable SUMO projects. See [the road authoring and SUMO guide](docs/SUMO_ROADS.md) for setup, controls, validation results and model boundaries.
 
@@ -34,8 +34,8 @@ Build and run with CMake and a C++17 compiler:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
-build/traffic_ui
-build/traffic_ui examples/curved-mask.png
+build/traffic_wassup6.exe
+build/traffic_wassup6.exe examples/curved-mask.png
 ```
 
 Windows uses Win32/OpenGL 3, the ImGui submodule at `libs/imgui`, and Windows Imaging Component for PNG decoding. If needed, run `git submodule update --init libs/imgui`. No GLFW or SDL dependency is required. With multi-configuration generators, build with `--config Release`, test with `-C Release`, and run from `build/Release`. Single-configuration builds default to Release for geometry/pathfinding performance. Set `-DTRAFFIC_BUILD_UI=OFF` for the engine alone; non-Windows builds require libpng development files and do not build the Win32 viewer.

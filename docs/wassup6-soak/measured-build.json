@@ -1,0 +1,18 @@
+{
+  "build\\map_soak.exe": "55b35e48286832e4af77b1c0c257056bd2f230fcbd3f4033989f1e587cb07610",
+  "build\\traffic_wassup6.exe": "7260f4634b690014342a0820053c752f75e0d2e70e03c8eb3feeddb37fbfacb0",
+  "controller_sources": {
+    "Simulation.cpp": "0cfffcd18b4ed7aa346f84c98ed823169ca6b918da04aded09e96b4de173b2ac",
+    "HybridTraffic.cpp": "ad14c53efd181248ae2ac5068854e101e4e80e5e77ad817147a1b7e459287d63",
+    "TrafficFlow.cpp": "29e0e0d2cb81146b8da7c8219c5d396e5ca4619a7e4885441744e4c7b8001c5e",
+    "Lanes.cpp": "9c60356abafa9158f0a419d8ee5d6f4c034072a60c464e62370a8bd950100bba",
+    "Geometry.cpp": "bda617fe59da700a541d3bb9e1ad9a6b7f6c705c8bb6f3c448fe630870e68daf",
+    "SignalQueue.cpp": "aa3f5aadf2e59d2f645a085b9db999e6632a3dc187ec7a9b3459bde23fdbfab7",
+    "SignalApproach.cpp": "a2b3494aab521abdfb2e17d8f6c2c9badf1af7d493fc39edc4ff70ca278acf67"
+  },
+  "archived_binaries": {
+    "build/traffic_wassup6_soak.exe": "7260f4634b690014342a0820053c752f75e0d2e70e03c8eb3feeddb37fbfacb0",
+    "build/wassup6-soak/corridor-map_soak.exe": "55b35e48286832e4af77b1c0c257056bd2f230fcbd3f4033989f1e587cb07610"
+  },
+  "archived_sources": "build/wassup6-soak/measured-sources"
+}
