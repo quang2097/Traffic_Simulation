@@ -24,12 +24,16 @@ std::string chooseFile(bool save,const char* filter,const char* extension,const 
     return "";
 }
 bool typedFloat(const char* label,float* value,float low,float high,const char* format="%.3f") {
-    if(!ImGui::InputFloat(label,value,0,0,format,ImGuiInputTextFlags_EnterReturnsTrue)) return false;
+    if(label[0]!='#' || label[1]!='#')ImGui::TextUnformatted(label);
+    ImGui::SetNextItemWidth(-1);
+    if(!ImGui::InputFloat((std::string("##")+label).c_str(),value,0,0,format,ImGuiInputTextFlags_EnterReturnsTrue)) return false;
     *value=std::isfinite(*value)?std::clamp(*value,low,high):low;
     return true;
 }
 bool typedDouble(const char* label,double* value,double low,double high,const char* format="%.6f") {
-    if(!ImGui::InputDouble(label,value,0,0,format,ImGuiInputTextFlags_EnterReturnsTrue)) return false;
+    if(label[0]!='#' || label[1]!='#')ImGui::TextUnformatted(label);
+    ImGui::SetNextItemWidth(-1);
+    if(!ImGui::InputDouble((std::string("##")+label).c_str(),value,0,0,format,ImGuiInputTextFlags_EnterReturnsTrue)) return false;
     *value=std::isfinite(*value)?std::clamp(*value,low,high):low;
     return true;
 }
@@ -51,10 +55,13 @@ void distributionPlot(const char* label,float mean,float sigma,float maximum) {
     ImGui::TextDisabled("0                          %.1f",maximum);
 }
 }
-SimulationView::SimulationView(const char* initialMap) : source_(makeDemoMap()),simulation_(source_,42) {
-    profiles_=vietnameseCityProfiles(); urbanTraffic_.enabled=true;
-    tugSettings_.enabled=true;
-    turnNegotiation_.enabled=true;
+SimulationView::SimulationView(const char* initialMap,SimulationEngine engine) : engine_(engine),source_(makeDemoMap()),simulation_(source_,42) {
+    workspace_=engine_==SimulationEngine::Native?0:5;
+    profiles_=vietnameseCityProfiles(); urbanTraffic_.enabled=false;
+    routing_.rtsStyle=false;routing_.spreadAtSignals=false;routing_.refreshMovingRoutes=false;
+    trafficRecoverySettings_.enabled=false;stuckVehicleSettings_.enabled=false;stuckVehicleSettings_.junctionEnabled=false;flow_.sublanes=false;
+    tugSettings_.enabled=false;
+    turnNegotiation_.enabled=false;
     routing_.localInterval=.35; routing_.movingRefreshInterval=1.2;
     trafficRecoverySettings_.stopSeconds=.6;
     if(!initialMap) { source_=makeJunctionDemoMap(); graph_=makeJunctionDemoGraph(); lanes_=graph_.lanes(); metersPerPixel_=1; }
@@ -69,6 +76,33 @@ SimulationView::SimulationView(const char* initialMap) : source_(makeDemoMap()),
     for(int i=0;i<vehicleKindCount;++i) spawnMix_[i]=static_cast<float>(shares[i]);
 }
 void SimulationView::cancelPendingLine() { linePending_=false; linkedStage_=0; linkedLight_=-1; if(editorMode_==8) editorMode_=0; }
+bool SimulationView::editorActionActive() const {
+    return connectionFrom_>=0 || drawingRoad_ || splittingRoad_ || placingRoadSignal_ || editorMode_!=0 || placeLight_ || linePending_ || linkedStage_>0;
+}
+const char* SimulationView::editorActionLabel() const {
+    if(connectionFrom_>=0)return severing_?"Sever connection":"Connect nodes";
+    if(drawingRoad_)return "Sketch road";
+    if(placingRoadSignal_)return "Place road signal node";
+    if(splittingRoad_)return "Insert road node";
+    if(editorMode_==3)return "Place nodes";
+    if(editorMode_==8)return "Queue detector";
+    if(editorMode_==7)return linkedStage_==0?"Traffic-light line":"Allowed exit";
+    if(placeLight_ || editorMode_==5)return "Traffic-light placement";
+    if(editorMode_==1)return "Paint road";
+    if(editorMode_==2)return "Erase road";
+    if(editorMode_==6)return "Lane divider";
+    return "Draw line";
+}
+void SimulationView::cancelEditorAction() {
+    connectionFrom_=-1;severing_=false;drawingRoad_=splittingRoad_=false;
+    roadDraft_.clear();roadDraftWidths_.clear();placingRoadSignal_=false;strokeActive_=false;placeLight_=false;
+    cancelPendingLine();editorMode_=0;
+}
+void SimulationView::selectEngine(SimulationEngine engine) {
+    if(engine_==engine && engineReady_)return;
+    running_=false;engine_=engine;workspace_=engine_==SimulationEngine::Native?0:5;
+    cancelEditorAction();reset();
+}
 void SimulationView::refreshMap(bool pauseTraffic,bool importSignals) {
     for(auto& tile:source_.tiles) if(tile==Tile::Destination) tile=Tile::Road;
     source_.rebuildFeatures();
@@ -99,20 +133,22 @@ void SimulationView::syncSignalMask() {
         source_.paintStroke(light.a,light.b,Tile::Signal,source_.metersPerPixel*.6);
     source_.rebuildFeatures();
 }
-void SimulationView::addLight(Vec2 a,Vec2 b,bool permissive,Vec2 allowedA,Vec2 allowedB) {
+void SimulationView::addLight(Vec2 a,Vec2 b,bool permissive,Vec2 allowedA,Vec2 allowedB,Vec2 outDirection,int anchorNode) {
     auto next=lights_;
     next.push_back({a,b,10,2,12,0,true});
-    next.back().permissive=permissive; next.back().allowedA=allowedA; next.back().allowedB=allowedB;
+    next.back().permissive=permissive; next.back().allowedA=allowedA; next.back().allowedB=allowedB;next.back().outDirection=outDirection;next.back().anchorNode=anchorNode;
     simulation_.setTrafficLights(next);
     lights_=simulation_.trafficLights(); selectedLight_=static_cast<int>(lights_.size())-1;
     syncSignalMask();
     status_="Light added. Adjust its timings live in Traffic lights; click again to add another.";
 }
 void SimulationView::reset() {
+    sumo_.reset();
+    engineReady_=false;turnDraftNode_=-1;laneExitsReady_=false;
     for(auto& tile:source_.tiles) if(tile==Tile::Destination) tile=Tile::Road;
     source_.rebuildFeatures();
     laneOriginNodes_.clear();
-    if(std::any_of(graph_.connections.begin(),graph_.connections.end(),[](const auto& e){return e.roadType!=0;}) || std::any_of(graph_.nodes.begin(),graph_.nodes.end(),[](const auto& n){return n.openRadius>0;})) {
+    if(std::any_of(graph_.connections.begin(),graph_.connections.end(),[](const auto& e){return e.roadType!=0 || e.laneCount!=1 || e.reverseLaneCount>0 || !e.changeSections.empty() || !e.laneTurns.empty();}) || std::any_of(graph_.nodes.begin(),graph_.nodes.end(),[](const auto& n){return n.openRadius>0 || n.allowUTurn || n.internalRadius>0 || n.roadStation;})) {
         auto compiled=compileRoads(graph_); lanes_=std::move(compiled.lanes); laneOriginNodes_=std::move(compiled.originNodes);
     } else { lanes_=graph_.lanes(); for(const auto& edge:graph_.connections) laneOriginNodes_.push_back(edge.from); }
     nodeSpawnClocks_.assign(graph_.nodes.size(),0); spawnNodeRandom_.seed(static_cast<unsigned>(seed_));
@@ -120,6 +156,7 @@ void SimulationView::reset() {
     simulation_.setRoutingSettings(routing_);
     simulation_.setTrafficFlowSettings(flow_);
     simulation_.setStuckVehicleSettings(stuckVehicleSettings_);
+    simulation_.setGridlockEscapeSettings(gridlockEscape_);
     simulation_.setTrafficRecoverySettings(trafficRecoverySettings_);
     simulation_.setUrbanTrafficSettings(urbanTraffic_);
     simulation_.setTugSettings(tugSettings_);
@@ -128,15 +165,26 @@ void SimulationView::reset() {
     for(int i=0;i<vehicleKindCount;++i) simulation_.setProfile(static_cast<VehicleKind>(i),profiles_[i]);
     simulation_.setTrafficLights(lights_);
     lights_=simulation_.trafficLights();
-    try { simulation_.setLanes(lanes_); }
-    catch(const std::exception& e) { running_=false; status_=std::string("Lane network needs repair: ")+e.what(); }
+    try {
+        simulation_.setLanes(lanes_);
+        if(engine_==SimulationEngine::Sumo) {
+            sumo_=std::make_unique<SumoBackend>(simulation_,graph_,static_cast<unsigned>(seed_));
+            lanes_=simulation_.lanes();
+        }
+        engineReady_=true;
+        status_=engine_==SimulationEngine::Native?"Native simulation ready.":"SUMO simulation ready.";
+    } catch(const std::exception& e) { running_=false;status_=e.what(); }
     selected_=spawned_=0; elapsed_=accumulator_=0;
     stepBatch_.cancel();
     planningTimeToExclude_=0;
-    cancelPendingLine(); splittingRoad_=false;
+    cancelEditorAction();
+    laneExitsReady_=graph_.missingLaneExits().empty();if(running_ && !laneExitsReady_)validateRun();
 }
 void SimulationView::advanceTick(double seconds) {
+    if(!engineReady_) { running_=false;stepBatch_.cancel();return; }
+    try {
     double planningBefore=simulation_.totalSignalPlanningSeconds()+simulation_.totalTrafficRecoverySeconds();
+    if(!laneExitsReady_){validateRun();return;}
     if(automatic_) {
         nodeSpawnClocks_.resize(graph_.nodes.size(),0);
         for(std::size_t n=0;n<graph_.nodes.size();++n) {
@@ -145,7 +193,7 @@ void SimulationView::advanceTick(double seconds) {
             if(!consumeSpawnClock(nodeSpawnClocks_[n],seconds,node.rate)) continue;
             std::vector<int> outgoing;
             for(std::size_t e=0;e<laneOriginNodes_.size();++e) if(laneOriginNodes_[e]==static_cast<int>(n)) outgoing.push_back(static_cast<int>(e));
-            if(!outgoing.empty() && simulation_.entities().size()<static_cast<std::size_t>(maximumVehicles_)) {
+            if(!outgoing.empty() && simulation_.entities().size()+(sumo_?sumo_->pending():0)<static_cast<std::size_t>(maximumVehicles_)) {
                 int edge=outgoing[std::uniform_int_distribution<std::size_t>(0,outgoing.size()-1)(spawnNodeRandom_)];
                 if(simulation_.spawnRandomOnLane(edge)) ++spawned_;
             }
@@ -153,6 +201,7 @@ void SimulationView::advanceTick(double seconds) {
     }
     simulation_.tick(seconds); elapsed_=simulation_.seconds();
     planningTimeToExclude_+=simulation_.totalSignalPlanningSeconds()+simulation_.totalTrafficRecoverySeconds()-planningBefore;
+    } catch(const std::exception& e) {running_=false;accumulator_=0;stepBatch_.cancel();engineReady_=false;status_=std::string(engine_==SimulationEngine::Sumo?"SUMO stopped: ":"Native stopped: ")+e.what();}
 }
 void SimulationView::frame(double realSeconds) {
     realSeconds=std::max(0.0,realSeconds-planningTimeToExclude_); planningTimeToExclude_=0;
@@ -161,36 +210,48 @@ void SimulationView::frame(double realSeconds) {
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::Begin("Traffic Simulation",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_MenuBar);
     menuBar();
-    if(editorMode_==8 && ImGui::IsKeyPressed(ImGuiKey_Escape)) { editorMode_=0; cancelPendingLine(); }
-    const char* workspaces[]{"Simulation","Map design","Traffic lights","Vehicles","Files"};
-    for(int i=0;i<5;++i) {
-        if(i) ImGui::SameLine();
-        if(ImGui::Selectable(workspaces[i],workspace_==i,0,ImVec2(i==2?150:110,24))) workspace_=i;
+    if(validationNotice_){ImGui::OpenPopup("Lane exits required");validationNotice_=false;}
+    ImGui::SetNextWindowSize(ImVec2(520,370),ImGuiCond_Appearing);
+    if(ImGui::BeginPopupModal("Lane exits required",nullptr,ImGuiWindowFlags_NoResize)) {
+        ImGui::TextWrapped("Simulation refused: assign at least one outgoing lane for every non-destination lane. Select each listed node, then open Lane exits.");
+        ImGui::BeginChild("Missing lane exits",ImVec2(0,-45));for(auto& issue:validationIssues_)ImGui::BulletText("%s",issue.c_str());ImGui::EndChild();
+        if(ImGui::Button("Go to map design")){workspace_=1;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(ImGui::Button("Close"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
-    ImGui::SameLine(); ImGui::TextDisabled("Traffic Lab");
+    if(ImGui::IsKeyPressed(ImGuiKey_F1))manualOpen_=!manualOpen_;
+    if(ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::GetIO().WantTextInput) {
+        if(laneExitEditorOpen_){laneExitEditorOpen_=false;turnDirty_=false;turnDraftNode_=-1;}
+        else if(editorActionActive())cancelEditorAction();else manualOpen_=false;
+    }
+    const char* workspaces[]{"Native simulation","SUMO simulation","Map design","Traffic lights","Vehicles","Files"};
+    const int pages[]{0,5,1,2,3,4};
+    for(int i=0;i<6;++i) {
+        if(i)ImGui::SameLine();
+        if(ImGui::Selectable(workspaces[i],workspace_==pages[i],0,ImVec2(ImGui::CalcTextSize(workspaces[i]).x+24,24)))workspace_=pages[i];
+    }
     ImGui::Separator();
-    ImGui::BeginDisabled(clockMode_==1 || stepBatch_.active());
+    ImGui::BeginDisabled(clockMode_==1 || stepBatch_.active() || !engineReady_);
     if(ImGui::Button(running_?"Pause":"Play")) {
-        bool start=!running_; if(start) { splittingRoad_=false; if(mapDirty_) refreshMap(true); editorMode_=0; cancelPendingLine(); strokeActive_=false; }
-        running_=start; accumulator_=0;
+        bool start=!running_; if(start) { if(mapDirty_) refreshMap(true); cancelEditorAction(); }
+        running_=start && engineReady_ && validateRun(); accumulator_=0;
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
-    ImGui::BeginDisabled(running_ || stepBatch_.active());
-    if(ImGui::Button("Step")) { if(mapDirty_) refreshMap(true); editorMode_=0; cancelPendingLine(); strokeActive_=false; placeLight_=false; accumulator_=0; stepBatch_.request(manualStepSeconds_); }
+    ImGui::BeginDisabled(running_ || stepBatch_.active() || !engineReady_);
+    if(ImGui::Button("Step")) { if(mapDirty_) refreshMap(true);cancelEditorAction(); accumulator_=0;if(validateRun())stepBatch_.request(manualStepSeconds_); }
     ImGui::EndDisabled(); ImGui::SameLine();
     if(ImGui::Button("Reset traffic")) reset();
     ImGui::SameLine(); if(ImGui::Button("Fit view")) { mapZoom_=1; mapPan_={}; }
-    ImGui::SameLine(); ImGui::TextDisabled("%.1f s  |  %zu vehicles",elapsed_,simulation_.entities().size());
+    ImGui::SameLine();ImGui::TextDisabled("%s | %.1f s",engine_==SimulationEngine::Native?"Native":"SUMO",elapsed_);
+    ImGui::SameLine();if(ImGui::Button("User manual (F1)"))manualOpen_=true;
     ImGui::Separator();
-    if(!status_.empty()) ImGui::TextWrapped("%s",status_.c_str());
-    ImGui::BeginChild("Controls",ImVec2(370,0),ImGuiChildFlags_Borders);
+    const float panelHeight=std::max(100.f,ImGui::GetContentRegionAvail().y-28);
+    ImGui::BeginChild("Controls",ImVec2(350,panelHeight),ImGuiChildFlags_Borders);
     controls();
     ImGui::EndChild(); ImGui::SameLine();
-    // Run a fixed 120 Hz clock, independent of rendering frame rate.
-    constexpr double dt=1.0/120;
+    // SUMO lane decisions advance at a fixed 10 Hz; free motion uses 100 Hz substeps.
+    const double dt=engine_==SimulationEngine::Sumo?.1:1.0/120;
     if (running_ && clockMode_==0) accumulator_+=std::clamp(realSeconds,0.0,0.1)*timeScale_;
-    while (accumulator_>=dt) {
+    while (running_ && accumulator_>=dt) {
         advanceTick(dt); accumulator_-=dt;
     }
     if(stepBatch_.active()) {
@@ -201,23 +262,16 @@ void SimulationView::frame(double realSeconds) {
             stepBatch_.advanceOne([&](double seconds) { advanceTick(seconds); });
         } while(stepBatch_.active() && std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count()<8);
     }
-    ImGui::BeginChild("Workspace",ImVec2(0,0));
-    ImGui::Text("Open junction: %zu vehicles",simulation_.openJunctionVehicles());
-    ImGui::Text("Deleted: %llu total | %llu stuck | %llu junction",
-        static_cast<unsigned long long>(simulation_.removedStuckVehicles()),
-        static_cast<unsigned long long>(simulation_.removedQueueBlockers()),
-        static_cast<unsigned long long>(simulation_.removedJunctionVehicles()));
+    ImGui::BeginChild("Workspace",ImVec2(0,panelHeight));
+    ImGui::Text("%zu active   |   %llu completed   |   %zu in open junctions",
+        simulation_.entities().size(),static_cast<unsigned long long>(simulation_.completed()),simulation_.openJunctionVehicles());
     if(ImGui::CollapsingHeader("Live statistics and diagnostics")) {
+    if(sumo_) ImGui::Text("SUMO collisions: %llu | teleports: %llu | free handoffs: %llu | pending: %zu",
+        static_cast<unsigned long long>(sumo_->collisions()),static_cast<unsigned long long>(sumo_->teleports()),
+        static_cast<unsigned long long>(sumo_->handoffs()),sumo_->pending());
     ImGui::Text("%zu active | %llu completed | %.1fs | %llu gap replans",
         simulation_.entities().size(),static_cast<unsigned long long>(simulation_.completed()),elapsed_,static_cast<unsigned long long>(simulation_.replans()));
-    ImGui::Text("Lane changes: %llu | candidate checks: %llu | gap requests: %llu",static_cast<unsigned long long>(simulation_.totalLaneChanges()),static_cast<unsigned long long>(simulation_.laneChangeAttempts()),static_cast<unsigned long long>(simulation_.cooperativeGapRequests()));
-    auto inside=std::count_if(simulation_.entities().begin(),simulation_.entities().end(),[](const Entity& e){return e.inOpenJunction;});
-    ImGui::Text("Junction entries: %llu | crossing now: %zu",static_cast<unsigned long long>(simulation_.junctionAdmissions()),static_cast<std::size_t>(inside));
-    ImGui::TextDisabled("%llu yielding recoveries | Turn approaches reserved",static_cast<unsigned long long>(simulation_.recoveries()));
-    ImGui::TextDisabled("Last deleted vehicle: %llu",static_cast<unsigned long long>(simulation_.lastRemovedStuckVehicle()));
-    ImGui::TextDisabled("%llu local detours | %llu global searches | %llu shared-goal cache hits",
-        static_cast<unsigned long long>(simulation_.localDetours()),static_cast<unsigned long long>(simulation_.globalPlans()),
-        static_cast<unsigned long long>(simulation_.navigation().cacheHits()));
+    ImGui::Text("Lane transitions: %llu",static_cast<unsigned long long>(simulation_.totalLaneChanges()));
     auto stops=simulation_.stopStatistics(includeCompletedStops_);
     ImGui::Text("Stopped seconds / vehicle: mean (average) %.2f | min %.2f | max %.2f",
         stops.meanSeconds,stops.minSeconds,stops.maxSeconds);
@@ -225,8 +279,18 @@ void SimulationView::frame(double realSeconds) {
     if(editorMode_==8) ImGui::TextColored(ImVec4(1,.7f,.3f,1),"Queue detector for L%d: click %s (Esc cancels)",linkedLight_,linePending_?"end":"start");
     }
     canvas();
-    inspector();
-    ImGui::EndChild(); ImGui::End();
+    if(showInspector_) {
+        ImGui::BeginChild("Inspector",ImVec2(0,200),ImGuiChildFlags_Borders);inspector();ImGui::EndChild();
+    }
+    ImGui::EndChild();
+    ImGui::Separator();
+    auto summary=status_.empty()?std::string("Ready"):status_.substr(0,status_.find('\n'));
+    ImGui::TextUnformatted(summary.c_str());
+    if(ImGui::IsItemHovered() && !status_.empty()) {
+        ImGui::BeginTooltip();ImGui::PushTextWrapPos(ImGui::GetFontSize()*75);ImGui::TextUnformatted(status_.c_str());ImGui::PopTextWrapPos();ImGui::EndTooltip();
+    }
+    ImGui::End();
+    manual();
 }
 void SimulationView::menuBar() {
     bool newMap=false;
@@ -235,6 +299,10 @@ void SimulationView::menuBar() {
             if(ImGui::MenuItem("New map...")) newMap=true;
             if(ImGui::MenuItem("Open map PNG...")) fileAction(0);
             if(ImGui::MenuItem("Open node network...")) fileAction(1);
+            if(ImGui::BeginMenu("Examples")){
+                if(ImGui::MenuItem("Seven-lane routing"))loadLaneDemo();
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if(ImGui::MenuItem("Save node network")) fileAction(2);
             if(ImGui::MenuItem("Save node network as...")) fileAction(3);
@@ -247,12 +315,16 @@ void SimulationView::menuBar() {
             if(ImGui::MenuItem("Fit map")) { mapZoom_=1; mapPan_={}; }
             ImGui::MenuItem("Selected route",nullptr,&routes_);
             ImGui::MenuItem("Vehicle clearance",nullptr,&showClearance_);
+            ImGui::MenuItem("Vehicle inspector",nullptr,&showInspector_);
+            ImGui::EndMenu();
+        }
+        if(ImGui::BeginMenu("Simulation")) {
+            if(ImGui::MenuItem("Native simulation",nullptr,engine_==SimulationEngine::Native))workspace_=0;
+            if(ImGui::MenuItem("SUMO simulation",nullptr,engine_==SimulationEngine::Sumo))workspace_=5;
             ImGui::EndMenu();
         }
         if(ImGui::BeginMenu("Help")) {
-            ImGui::TextUnformatted("Map: wheel to zoom, middle drag to pan.");
-            ImGui::TextUnformatted("Click a node for properties. Ctrl-click connected nodes to select a path.");
-            ImGui::TextUnformatted("Save PNG and node network separately; keep .signals companions together.");
+            if(ImGui::MenuItem("User manual","F1"))manualOpen_=true;
             ImGui::EndMenu();
         }
         ImGui::EndMenuBar();
@@ -267,7 +339,7 @@ void SimulationView::menuBar() {
         if(ImGui::Button("Create map")) {
             source_=Map(newWidth_,newHeight_,std::vector<Tile>(static_cast<std::size_t>(newWidth_)*newHeight_,Tile::Wall),metersPerPixel_);
             graph_={}; lanes_.clear(); lights_.clear(); pathNodes_.clear(); selectedNode_=-1; editorMode_=1; workspace_=1;
-            refreshMap(true); ImGui::CloseCurrentPopup();
+            refreshMap(true);editorMode_=1; ImGui::CloseCurrentPopup();
         }
         ImGui::EndDisabled(); ImGui::SameLine();
         if(ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
@@ -299,14 +371,148 @@ void SimulationView::fileAction(int action) {
     } catch(const std::exception& error) { status_=error.what(); }
     accumulator_=0;
 }
+void SimulationView::simulationControls() {
+    const auto target=workspace_==0?SimulationEngine::Native:SimulationEngine::Sumo;
+    if(engine_!=target || !engineReady_) {
+        if(ImGui::Button(target==SimulationEngine::Native?"Use Native":"Use SUMO"))selectEngine(target);
+        if(ImGui::IsItemHovered())ImGui::SetTooltip("Resets traffic and pauses. Map, signals and vehicle profiles are kept.");
+    } else ImGui::TextColored(ImVec4(.4f,.9f,.65f,1),"Active engine");
+    ImGui::BeginDisabled(engine_!=target || !engineReady_);
+    if(target==SimulationEngine::Native) {
+        if(ImGui::CollapsingHeader("Junction priority")) {
+            bool changed=ImGui::Checkbox("Swap priority after a long yield",&flow_.swapStarvedPriorities);
+            ImGui::BeginDisabled(!flow_.swapStarvedPriorities);
+            changed|=typedDouble("Yield timeout (s)",&flow_.priorityWaitSeconds,1,3600,"%.1f");ImGui::EndDisabled();
+            if(changed)simulation_.setTrafficFlowSettings(flow_);
+        }
+        if(ImGui::CollapsingHeader("Native driving")) {
+            bool changed=ImGui::Checkbox("Predictive junctions",&flow_.predictiveJunctions);
+            changed|=ImGui::Checkbox("Sublane movement",&flow_.sublanes);
+            changed|=typedDouble("Lateral resolution (m)",&flow_.lateralResolution,.1,2,"%.2f");
+            changed|=typedDouble("Lateral gap (m)",&flow_.lateralGap,0,2,"%.2f");
+            if(changed)simulation_.setTrafficFlowSettings(flow_);
+            bool urban=ImGui::Checkbox("Smooth mixed traffic",&urbanTraffic_.enabled);
+            urban|=typedDouble("Two-wheeler headway (s)",&urbanTraffic_.motorbikeHeadway,.2,3,"%.2f");
+            urban|=typedDouble("Conflict prediction (s)",&urbanTraffic_.predictionSeconds,.2,3,"%.2f");
+            if(urban)simulation_.setUrbanTrafficSettings(urbanTraffic_);
+        }
+        if(ImGui::CollapsingHeader("Native recovery")) {
+            bool changed=ImGui::Checkbox("Replan stopped traffic",&trafficRecoverySettings_.enabled);
+            changed|=typedDouble("Replan delay (s)",&trafficRecoverySettings_.stopSeconds,.1,30,"%.2f");
+            changed|=typedDouble("Replan radius (m)",&trafficRecoverySettings_.radius,5,250,"%.1f");
+            if(changed)simulation_.setTrafficRecoverySettings(trafficRecoverySettings_);
+            bool removal=ImGui::Checkbox("Remove stuck queue leaders",&stuckVehicleSettings_.enabled);
+            removal|=typedDouble("Queue blocker timeout (s)",&stuckVehicleSettings_.timeoutSeconds,1,3600,"%.1f");
+            if(removal)simulation_.setStuckVehicleSettings(stuckVehicleSettings_);
+            bool escapes=ImGui::Checkbox("Release stale reservations",&gridlockEscape_.enabled);
+            escapes|=typedDouble("Reservation timeout (s)",&gridlockEscape_.afterSeconds,1,3600,"%.1f");
+            if(escapes)simulation_.setGridlockEscapeSettings(gridlockEscape_);
+        }
+        if(ImGui::CollapsingHeader("Native advanced controls")) {
+            bool routing=ImGui::Checkbox("RTS routing",&routing_.rtsStyle);
+            routing|=ImGui::Checkbox("Refresh moving routes",&routing_.refreshMovingRoutes);
+            routing|=typedDouble("Route refresh interval (s)",&routing_.movingRefreshInterval,.25,120,"%.2f");
+            if(routing)simulation_.setRoutingSettings(routing_);
+            if(ImGui::Checkbox("Tug assistance",&tugSettings_.enabled))simulation_.setTugSettings(tugSettings_);
+            if(ImGui::Checkbox("Turn negotiation",&turnNegotiation_.enabled))simulation_.setTurnNegotiationSettings(turnNegotiation_);
+            if(ImGui::SliderInt("Collision workers",&collisionWorkers_,1,static_cast<int>(Simulation::maximumCollisionWorkers())))simulation_.setCollisionWorkers(collisionWorkers_);
+        }
+    } else if(ImGui::CollapsingHeader("SUMO diagnostics") && sumo_)ImGui::TextWrapped("%s",sumo_->status().c_str());
+    if(ImGui::CollapsingHeader("Clock and spawning",ImGuiTreeNodeFlags_DefaultOpen)) {
+        const char* modes[]{"Real time","Manual steps"};
+        if(ImGui::Combo("Clock",&clockMode_,modes,2)){running_=false;accumulator_=0;stepBatch_.cancel();}
+        if(typedFloat("Seconds per step",&manualStepSeconds_,.1f,3600,"%.1f"))manualStepSeconds_=std::max(.1f,std::round(manualStepSeconds_*10)/10);
+        if(stepBatch_.active()) {
+            ImGui::ProgressBar(static_cast<float>(stepBatch_.progress()),ImVec2(-1,0));
+            if(ImGui::Button("Cancel remaining step"))stepBatch_.cancel();
+        }
+        ImGui::BeginDisabled(clockMode_==1);ImGui::SliderFloat("Time scale",&timeScale_,.1f,5,"%.1fx");ImGui::EndDisabled();
+        ImGui::InputInt("Seed",&seed_);
+        ImGui::Checkbox("Automatic spawning",&automatic_);
+        ImGui::SetNextItemWidth(100);
+        if(ImGui::InputInt("Vehicle limit",&maximumVehicles_,0,0,ImGuiInputTextFlags_EnterReturnsTrue))maximumVehicles_=std::clamp(maximumVehicles_,1,10000);
+        if(ImGui::Button("Spawn vehicle") && validateRun()) {
+            std::vector<int> entries;
+            for(std::size_t l=0;l<laneOriginNodes_.size();++l)if(laneOriginNodes_[l]>=0 && graph_.nodes[laneOriginNodes_[l]].spawn)entries.push_back(static_cast<int>(l));
+            try {
+                bool spawned=!entries.empty() && simulation_.spawnRandomOnLane(entries[std::uniform_int_distribution<std::size_t>(0,entries.size()-1)(spawnNodeRandom_)]);
+                if(spawned){++spawned_;status_="Vehicle requested.";}else status_="No feasible insertion or destination.";
+            } catch(const std::exception& e){status_=e.what();running_=false;}
+        }
+    }
+    ImGui::EndDisabled();
+}
 void SimulationView::controls() {
+    if(workspace_!=1 || running_){laneExitEditorOpen_=false;turnDirty_=false;}
+    if(workspace_==1 && laneExitEditorOpen_) {
+        if(selectedNode_<0 || selectedNode_>=static_cast<int>(graph_.nodes.size())) { laneExitEditorOpen_=false;turnDirty_=false; }
+        else {
+            ImGui::SeparatorText("Lane connections");
+            ImGui::Text("At node N%d",selectedNode_);
+            ImGui::BeginDisabled(turnDirty_);
+            bool done=ImGui::Button("Done / return to map tools");ImGui::EndDisabled();
+            if(done) { laneExitEditorOpen_=false;turnDirty_=false;turnDraftNode_=-1; }
+            else laneConnectionsPopup();
+            return;
+        }
+    }
     ImGui::PushItemWidth(170);
-    const char* titles[]{"Simulation settings","Map design","Traffic lights","Vehicle settings","Files and map scale"};
+    const char* titles[]{"Native simulation","Map design","Traffic lights","Vehicle settings","Files and map scale","SUMO simulation"};
     ImGui::SeparatorText(titles[workspace_]);
     if(workspace_==1 || workspace_==4) {
-    if(workspace_==1 && ImGui::CollapsingHeader("Roads and nodes",ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextWrapped("Canvas: mouse wheel zoom, middle-button drag to pan.");
+    if(workspace_==1) {
+        ImGui::TextWrapped("Paint the drivable area, sketch roads inside it, then set where vehicles start and finish.");
         if(ImGui::Button("Fit map view")) { mapZoom_=1; mapPan_={}; }
+        ImGui::SameLine();
+        if(ImGui::Button("Design guide")) { manualOpen_=true; manualChapter_=5; manualSearch_[0]=0; }
+        ImGui::TextDisabled("Wheel: zoom | Middle drag: pan");
+        if(editorActionActive()) {
+            ImGui::TextColored(ImVec4(1,.85f,.35f,1),"Active: %s",editorActionLabel());
+            if(drawingRoad_) ImGui::TextWrapped("Click points on the road area. Add at least two, then Finish road. Existing nodes snap to your sketch.");
+            else if(editorMode_==1 || editorMode_==2) ImGui::TextWrapped("Drag on the map to paint or erase the drivable area. Painting alone does not create traffic lanes.");
+            else if(splittingRoad_ || placingRoadSignal_) ImGui::TextWrapped("Click an existing road centerline to insert a node.");
+            else if(connectionFrom_>=0) ImGui::TextWrapped("Click the other node to complete the connection action.");
+            else if(editorMode_==3) ImGui::TextWrapped("Click inside the road area to add a node. Connect it from its Roads tab.");
+            else ImGui::TextWrapped("Click the start and end of the line on the map.");
+            if(drawingRoad_) {
+                ImGui::Text("%zu points placed (minimum 2)",roadDraft_.size());
+                ImGui::BeginDisabled(roadDraft_.empty());
+                if(ImGui::Button("Undo last point")){roadDraft_.pop_back();roadDraftWidths_.pop_back();}
+                ImGui::EndDisabled();
+                if(ImGui::TreeNode("Taper and point widths")) {
+                ImGui::TextUnformatted("Width at next node (m)"); ImGui::SetNextItemWidth(-1);
+                ImGui::SliderFloat("##next_node_width",&nextPointWidth_,.5f,15,"%.2f");
+                for(std::size_t i=0;i<roadDraftWidths_.size();++i) {
+                    ImGui::PushID(static_cast<int>(i)); float width=static_cast<float>(roadDraftWidths_[i]);
+                    ImGui::Text("Sketch node %zu width (m)",i); ImGui::SetNextItemWidth(-1);
+                    if(ImGui::SliderFloat("##draft_width",&width,.5f,15,"%.2f")) roadDraftWidths_[i]=width;
+                    ImGui::PopID();
+                }
+
+                ImGui::TreePop();
+                }
+                ImGui::BeginDisabled(roadDraft_.size()<2);
+                if(ImGui::Button("Finish road")) {
+                    try {
+                        auto proposed=graph_; proposed.useExplicitDestinations(); int a=proposed.addNode(roadDraft_.front()),b=proposed.addNode(roadDraft_.back());
+                        if(proposed.pathConnection(a,b)>=0) throw std::invalid_argument("Those junctions are already connected; select that path to edit it.");
+                        proposed.connect(a,b,laneWidth_,laneSpeed_); auto& road=proposed.connections.back(); road.roadType=newRoadType_; road.laneCount=newRoadLanes_; road.shape=roadDraft_; road.shapeWidths=roadDraftWidths_; road.width=roadDraftWidths_.front();
+                        if(applyGraph(proposed)) { drawingRoad_=false; roadDraft_.clear(); roadDraftWidths_.clear(); }
+                    } catch(const std::exception& e) { status_=e.what(); }
+                }
+                ImGui::EndDisabled();
+            }
+            if(ImGui::Button("Stop tool (Esc)")) cancelEditorAction();
+        } else ImGui::TextWrapped("Select a tool below, or click a node on the map to edit it.");
+        if(ImGui::CollapsingHeader("1. Paint drivable area",ImGuiTreeNodeFlags_DefaultOpen)) {
+            if(ImGui::Button("Paint road area")) { cancelEditorAction(); editorMode_=1; running_=false; stepBatch_.cancel(); }
+            ImGui::SameLine();
+            if(ImGui::Button("Erase area")) { cancelEditorAction(); editorMode_=2; running_=false; stepBatch_.cancel(); }
+            ImGui::SetNextItemWidth(-1); ImGui::SliderFloat("##paint_width",&brushWidth_,.2f,20,"Brush: %.1f m");
+        }
+    }
+    if(workspace_==1 && ImGui::CollapsingHeader("2. Create roads",ImGuiTreeNodeFlags_DefaultOpen)) {
+        if(ImGui::TreeNode("Example networks")) {
         if(ImGui::Button("Load lane-change demonstration")) {
             NodeGraph demo; demo.explicitDestinations=true; demo.addNode({10,25}); demo.addNode({190,25}); demo.nodes[0].spawn=true; demo.nodes[1].destination=true;
             demo.connect(0,1,4,10); demo.connections[0].roadType=1; demo.connections[0].laneCount=2;
@@ -330,45 +536,33 @@ void SimulationView::controls() {
                 running_=false; reset(); status_="Wassup5: right-hand traffic, paired one-way carriageways, others two-way; 0.73 m/pixel. Native lane changes and open-junction navigation enabled.";
             } catch(const std::exception& e) { status_=e.what(); }
         }
-        ImGui::Combo("Road direction",&newRoadType_,"Legacy centerline\0One-way road\0Two-way road\0");
-        ImGui::SliderInt("Lanes / direction",&newRoadLanes_,1,4);
-        if(ImGui::Button("Insert junction node on road")) { splittingRoad_=true; drawingRoad_=false; editorMode_=0; running_=false; stepBatch_.cancel(); status_="Click an existing road centerline, then connect a side road to the inserted node."; }
-        if(splittingRoad_ && ImGui::Button("Cancel junction insertion")) splittingRoad_=false;
-        if(ImGui::Button("Sketch road")) { splittingRoad_=false; drawingRoad_=true; roadDraft_.clear(); roadDraftWidths_.clear(); nextPointWidth_=laneWidth_; editorMode_=0; connectionFrom_=-1; running_=false; stepBatch_.cancel(); }
-        if(ImGui::Button("Draw individual lane")) { newRoadType_=1; newRoadLanes_=1; splittingRoad_=false; drawingRoad_=true; roadDraft_.clear(); roadDraftWidths_.clear(); nextPointWidth_=laneWidth_; editorMode_=0; connectionFrom_=-1; running_=false; stepBatch_.cancel(); }
-        if(drawingRoad_) {
-            ImGui::TextUnformatted("Width at next node (m)"); ImGui::SetNextItemWidth(-1);
-            ImGui::SliderFloat("##next_node_width",&nextPointWidth_,.5f,15,"%.2f");
-            for(std::size_t i=0;i<roadDraftWidths_.size();++i) {
-                ImGui::PushID(static_cast<int>(i)); float width=static_cast<float>(roadDraftWidths_[i]);
-                ImGui::Text("Sketch node %zu width (m)",i); ImGui::SetNextItemWidth(-1);
-                if(ImGui::SliderFloat("##draft_width",&width,.5f,15,"%.2f")) roadDraftWidths_[i]=width;
-                ImGui::PopID();
-            }
-            ImGui::TextWrapped("Click centerline points; snap the first/last to existing junction nodes. Choose direction and lanes above. No spawning is enabled automatically.");
-            if(ImGui::Button("Finish road") && roadDraft_.size()>=2) {
-                try {
-                    auto proposed=graph_; proposed.useExplicitDestinations(); int a=proposed.addNode(roadDraft_.front()),b=proposed.addNode(roadDraft_.back());
-                    if(proposed.pathConnection(a,b)>=0) throw std::invalid_argument("Those junctions are already connected; select that path to edit it.");
-                    proposed.connect(a,b,laneWidth_,laneSpeed_); auto& road=proposed.connections.back(); road.roadType=newRoadType_; road.laneCount=newRoadLanes_; road.shape=roadDraft_; road.shapeWidths=roadDraftWidths_; road.width=roadDraftWidths_.front();
-                    if(applyGraph(proposed)) { drawingRoad_=false; roadDraft_.clear(); roadDraftWidths_.clear(); }
-                } catch(const std::exception& e) { status_=e.what(); }
-            }
-            if(ImGui::Button("Cancel road sketch")) { drawingRoad_=false; roadDraft_.clear(); roadDraftWidths_.clear(); }
-        }
-        ImGui::TextWrapped("Native C++ traffic: finite-width lanes, gap-checked lane changes and free-space junctions. No external simulator is required.");
-        ImGui::Text("%zu junction nodes | %zu roads",graph_.nodes.size(),graph_.connections.size());
-        ImGui::TextWrapped("Left-click a node for settings. Use Place nodes to add isolated nodes. Ctrl + left-click connected nodes in travel order to select a path.");
-        if(ImGui::Button("Place nodes")) { editorMode_=3; running_=false; stepBatch_.cancel(); }
-        ImGui::SameLine(); if(ImGui::Button("Inspect nodes")) { editorMode_=0; connectionFrom_=-1; }
-        ImGui::TextUnformatted("New connection width (m)"); ImGui::SetNextItemWidth(-1);
+        ImGui::TreePop();}
+        ImGui::TextUnformatted("Direction");ImGui::SetNextItemWidth(-1);ImGui::Combo("##Road direction",&newRoadType_,"Legacy centerline\0One-way road\0Two-way road\0");
+        if(newRoadType_==1) ImGui::TextWrapped("Traffic travels from your first point to your last point.");
+        ImGui::TextUnformatted("Lanes per direction");ImGui::SetNextItemWidth(-1);ImGui::InputInt("##Road lanes",&newRoadLanes_);newRoadLanes_=std::clamp(newRoadLanes_,1,maximumRoadLanes);
+        ImGui::TextUnformatted("Lane width (m)"); ImGui::SetNextItemWidth(-1);
         ImGui::SliderFloat("##connection_width",&laneWidth_,.5f,10,"%.1f");
-        ImGui::TextUnformatted("New connection speed (m/s)"); ImGui::SetNextItemWidth(-1);
+        ImGui::TextUnformatted("Speed limit (m/s)"); ImGui::SetNextItemWidth(-1);
         ImGui::SliderFloat("##connection_speed",&laneSpeed_,.5f,30,"%.1f");
+        ImGui::BeginDisabled(drawingRoad_);
+        if(ImGui::Button("Sketch road")) { cancelEditorAction(); drawingRoad_=true; nextPointWidth_=laneWidth_; running_=false; stepBatch_.cancel(); }
+        ImGui::EndDisabled();
+
+        ImGui::Text("%zu junction nodes | %zu roads",graph_.nodes.size(),graph_.connections.size());
+
+    }
+    if(workspace_==1 && ImGui::CollapsingHeader("3. Configure nodes and trips",ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextWrapped("Click a node: General sets Spawn point and Trip destination. Lane exits sets where each incoming lane can go (required before Play).");
+        if(ImGui::Button("Select / inspect")) cancelEditorAction();
+        if(ImGui::Button("Place signal node on road")){cancelEditorAction();placingRoadSignal_=true;running_=false;stepBatch_.cancel();}
+        if(ImGui::Button("Insert junction node on road")) { cancelEditorAction(); splittingRoad_=true; running_=false; stepBatch_.cancel(); status_="Click an existing road centerline, then connect a side road to the inserted node."; }
+        if(ImGui::Button("Place nodes")) { cancelEditorAction(); editorMode_=3; running_=false; stepBatch_.cancel(); }
         if(connectionFrom_>=0) {
-            ImGui::Text("%s from node %d: click target node",severing_?"Sever":"Connect",connectionFrom_);
-            if(ImGui::Button("Cancel connection action")) connectionFrom_=-1;
+            ImGui::Text("Source node: %d",connectionFrom_);
         }
+    }
+    if(workspace_==1 && ImGui::CollapsingHeader("Advanced road properties")) {
+        ImGui::TextWrapped("Ctrl + click connected nodes in travel order to select roads for editing.");
         ImGui::Text("Selected path: %zu nodes",pathNodes_.size());
         if(ImGui::Button("Clear selected path")) pathNodes_.clear();
         if(pathNodes_.size()>1) {
@@ -381,7 +575,7 @@ void SimulationView::controls() {
                     for(std::size_t i=1;i<pathNodes_.size();++i) { int e=proposed.pathConnection(pathNodes_[i-1],pathNodes_[i]); if(e>=0) proposed.connections[e].smoothing=smooth; }
                     applyGraph(proposed);
                 }
-                ImGui::TextWrapped("Larger values round turns earlier with wider arcs, within the road and vehicle corridor. Changes reset traffic and affect turns leaving the selected connections.");
+
                 if(ImGui::TreeNode("Widths at every sketch node")) {
                     auto widths=shapeWidths(graph_.connections[edge]);
                     for(std::size_t point=0;point<widths.size();++point) {
@@ -400,10 +594,10 @@ void SimulationView::controls() {
                 }
                 int roadType=graph_.connections[edge].roadType,lanes=graph_.connections[edge].laneCount;
                 bool changed=ImGui::Combo("Selected road type",&roadType,"Legacy centerline\0One-way road\0Two-way road\0");
-                changed|=ImGui::SliderInt("Selected lanes / dir",&lanes,1,4);
+                changed|=ImGui::SliderInt("Selected lanes / dir",&lanes,1,maximumRoadLanes);
                 auto edited=graph_.connections[edge];
                 int reverse=edited.reverseLaneCount>0?edited.reverseLaneCount:edited.laneCount;
-                if(roadType==2) changed|=ImGui::SliderInt("Opposing lanes",&reverse,1,4);
+                if(roadType==2) changed|=ImGui::SliderInt("Opposing lanes",&reverse,1,maximumRoadLanes);
                 float shift=static_cast<float>(edited.lateralOffset),endScale=static_cast<float>(!edited.shapeWidths.empty()?edited.shapeWidths.back()/edited.shapeWidths.front():edited.endWidth>0?edited.endWidth/edited.width:1);
                 changed|=ImGui::SliderFloat("Road lateral offset (m)",&shift,-30,30,"%.1f");
                 bool endEdited=ImGui::SliderFloat("End width ratio",&endScale,.4f,2,"%.2fx"); changed|=endEdited;
@@ -423,6 +617,7 @@ void SimulationView::controls() {
                     for(std::size_t i=1;i<pathNodes_.size();++i) { int e=proposed.pathConnection(pathNodes_[i-1],pathNodes_[i]); if(e>=0) { proposed.connections[e].roadType=roadType; proposed.connections[e].laneCount=lanes; proposed.connections[e].reverseLaneCount=reverse; proposed.connections[e].lateralOffset=shift; proposed.connections[e].endWidth=proposed.connections[e].width*endScale; if(endEdited && !proposed.connections[e].shapeWidths.empty()) proposed.connections[e].shapeWidths.back()=proposed.connections[e].shapeWidths.front()*endScale; proposed.connections[e].forwardWidths=edited.forwardWidths; proposed.connections[e].reverseWidths=edited.reverseWidths; } }
                     applyGraph(proposed);
                 }
+                roadSections(edge);
             }
         }
     }
@@ -435,83 +630,7 @@ void SimulationView::controls() {
         if(ImGui::Button("Clear node network (reset traffic)")) { applyGraph({}); pathNodes_.clear(); selectedNode_=-1; }
     }
     }
-    if(workspace_==0) {
-    if(!flow_.predictiveJunctions && ImGui::CollapsingHeader("Negotiated turns",ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool changed=ImGui::Checkbox("Yield to turning vehicles",&turnNegotiation_.enabled);
-        float creep=static_cast<float>(turnNegotiation_.creepSpeed);
-        changed|=ImGui::SliderFloat("Turn creep cap (m/s)",&creep,.2f,4,"%.1f");
-        turnNegotiation_.creepSpeed=creep;
-        if(changed) simulation_.setTurnNegotiationSettings(turnNegotiation_);
-        ImGui::Text("Granted turns: %llu",static_cast<unsigned long long>(simulation_.negotiatedTurns()));
-        ImGui::TextWrapped("Conflicting turns take turns using their swept road space. Approaching traffic yields; vehicles already inside keep clearing. The owner creeps forward with collision checks until its tail has passed. Blocked exits and abandoned claims cannot hold the road indefinitely.");
-    }
-    if(!flow_.predictiveJunctions && ImGui::CollapsingHeader("Gravitational tug physics",ImGuiTreeNodeFlags_DefaultOpen)) {
-        if(!simulation_.lanes().empty()) ImGui::TextWrapped("Lane vehicles use constrained lane following. Free-road tugs, reversing and mask reroutes do not override lane directions.");
-        bool changed=ImGui::Checkbox("Enable front-point tug",&tugSettings_.enabled);
-        changed|=ImGui::Checkbox("Use force motion for every vehicle",&tugSettings_.alwaysOn);
-        float strength=static_cast<float>(tugSettings_.strengthNewtons),damping=static_cast<float>(tugSettings_.damping),speed=static_cast<float>(tugSettings_.maximumSpeed),delay=static_cast<float>(tugSettings_.afterStopSeconds);
-        changed|=ImGui::SliderFloat("Tug strength (N)",&strength,10,10000,"%.0f");
-        ImGui::TextDisabled("Force reference: 200 kg");
-        changed|=ImGui::SliderFloat("Tug damping (/s)",&damping,.1f,10,"%.1f");
-        changed|=ImGui::SliderFloat("Tug speed cap (m/s)",&speed,.1f,10,"%.1f");
-        changed|=ImGui::SliderFloat("Tug after standstill (s)",&delay,.1f,10,"%.2f");
-        tugSettings_.strengthNewtons=strength; tugSettings_.damping=damping; tugSettings_.maximumSpeed=speed; tugSettings_.afterStopSeconds=delay;
-        if(changed) {
-            try { simulation_.setTugSettings(tugSettings_); }
-            catch(const std::exception& e) { status_=e.what(); tugSettings_=simulation_.tugSettings(); }
-        }
-        ImGui::Text("Mass-weighted buffer contacts: %llu",static_cast<unsigned long long>(simulation_.tugContacts()));
-        ImGui::TextWrapped("A force at the nose pulls along a rolling route target, producing momentum and torque. Other bodies and road edges repel it. Default: brief assistance after persistent unexplained stops; ordinary queues remain guided. All-vehicle mode keeps force guidance active. Physical gaps and red lights remain enforced.");
-    }
-    if(ImGui::CollapsingHeader("Urban traffic behavior",ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool changed=ImGui::Checkbox("Smooth mixed traffic",&urbanTraffic_.enabled);
-        float headway=static_cast<float>(urbanTraffic_.motorbikeHeadway),prediction=static_cast<float>(urbanTraffic_.predictionSeconds),filter=static_cast<float>(urbanTraffic_.filterSpeed);
-        changed|=ImGui::SliderFloat("Two-wheeler headway (s)",&headway,.2f,3,"%.2f");
-        changed|=ImGui::SliderFloat("Conflict prediction (s)",&prediction,.2f,3,"%.1f");
-        changed|=ImGui::SliderFloat("Filtering cap (m/s)",&filter,.5f,8,"%.1f");
-        urbanTraffic_.motorbikeHeadway=headway; urbanTraffic_.predictionSeconds=prediction; urbanTraffic_.filterSpeed=filter;
-        if(changed) simulation_.setUrbanTrafficSettings(urbanTraffic_);
-        if(ImGui::Button("Vietnamese city preset (reset traffic)")) {
-            profiles_=vietnameseCityProfiles(); urbanTraffic_=UrbanTrafficSettings{}; urbanTraffic_.enabled=true;
-            routing_.localInterval=.35; routing_.movingRefreshInterval=1.2;
-            trafficRecoverySettings_.stopSeconds=.6;
-            reset(); auto shares=simulation_.spawnPercentages();
-            for(int i=0;i<vehicleKindCount;++i) spawnMix_[i]=static_cast<float>(shares[i]);
-            spawnMixDirty_=false;
-        }
-        ImGui::TextWrapped("Preset: 80%% motorbikes, 14%% cars, 3%% bikes, 2%% buses, 1%% trucks. Demonstration assumptions; tune to your street. Smooth following, bend braking and predictive crossing yields retain hard physical gaps and red-light rules.");
-    }
-    const char* clockModes[]{"Real time","Manual steps (on demand)"};
-    if(ImGui::Combo("Clock mode",&clockMode_,clockModes,2)) {
-        running_=false; accumulator_=0; stepBatch_.cancel();
-    }
-    ImGui::DragFloat("Seconds / step",&manualStepSeconds_,.05f,.01f,60,"%.3f",ImGuiSliderFlags_AlwaysClamp);
-    if(stepBatch_.active()) {
-        char progress[96]; std::snprintf(progress,sizeof(progress),"%.3f / %.3f simulation seconds",stepBatch_.completedSeconds(),stepBatch_.requestedSeconds());
-        ImGui::ProgressBar(static_cast<float>(stepBatch_.progress()),ImVec2(-1,0),progress);
-        if(ImGui::Button("Cancel remaining step")) stepBatch_.cancel();
-    } else if(stepBatch_.requestedSeconds()>0) ImGui::TextDisabled("Last advance: %.3f simulation seconds",stepBatch_.requestedSeconds());
-    if(clockMode_==1) ImGui::TextWrapped("Advance only when you click. Each step includes automatic spawning, lights and statistics. Larger durations require more computation; collision substeps stay small.");
-    ImGui::BeginDisabled(clockMode_==1);
-    ImGui::SliderFloat("Time scale",&timeScale_,0.1f,5.f,"%.1fx");
-    ImGui::EndDisabled();
-    ImGui::InputInt("Seed",&seed_);
-    ImGui::TextDisabled("Seed is applied on reset.");
-    ImGui::Checkbox("Automatic spawning",&automatic_);
-    ImGui::SetNextItemWidth(80);
-    if(ImGui::InputInt("Maximum active vehicles",&maximumVehicles_,0,0,ImGuiInputTextFlags_EnterReturnsTrue)) maximumVehicles_=std::clamp(maximumVehicles_,1,10000);
-    ImGui::TextWrapped("Type settings and press Enter to commit. Spawning pauses at this limit; active vehicles are never removed by it.");
-    ImGui::TextWrapped("Click a node to mark it as a spawn point and set its rate.");
-    if (ImGui::Button("Spawn vehicle")) {
-        std::vector<int> entries;
-        for(std::size_t i=0;i<laneOriginNodes_.size();++i) if(laneOriginNodes_[i]>=0 && graph_.nodes[laneOriginNodes_[i]].spawn) entries.push_back(static_cast<int>(i));
-        bool spawned=false;
-        if(!entries.empty()) spawned=simulation_.spawnRandomOnLane(entries[std::uniform_int_distribution<std::size_t>(0,entries.size()-1)(spawnNodeRandom_)]);
-        if(spawned) { ++spawned_; status_="Vehicle spawned at a marked node."; }
-        else status_="Mark connected spawn and trip-destination nodes, or wait for a safe insertion gap.";
-    }
-    ImGui::TextWrapped("Routing: random reachable endpoint; shortest-distance route to the chosen endpoint.");
-    }
+    if(workspace_==0 || workspace_==5)simulationControls();
     if(workspace_==3) {
     if(ImGui::CollapsingHeader("Vehicle spawn mix (%)",ImGuiTreeNodeFlags_DefaultOpen)) {
         double total=0; bool valid=true;
@@ -539,76 +658,31 @@ void SimulationView::controls() {
             for(int i=0;i<vehicleKindCount;++i) spawnMix_[i]=static_cast<float>(shares[i]);
             spawnMixDirty_=false;
         }
-        ImGui::TextWrapped("Enter all five percentages totaling 100, then Apply mix. Zero excludes a class. Shares apply to attempts; a vehicle that cannot fit may fail to spawn.");
+
     }
     }
-    if(workspace_==0) {
-    if(ImGui::CollapsingHeader("Performance and stopped time",ImGuiTreeNodeFlags_DefaultOpen)) {
-        if(ImGui::SliderInt("Collision workers",&collisionWorkers_,1,static_cast<int>(Simulation::maximumCollisionWorkers())))
-            simulation_.setCollisionWorkers(static_cast<unsigned>(collisionWorkers_));
-        ImGui::Text("Parallel batches: %llu",static_cast<unsigned long long>(simulation_.parallelCollisionBatches()));
-        bool flowChange=ImGui::Checkbox("Predictive junction controller",&flow_.predictiveJunctions);
-        flowChange|=ImGui::Checkbox("Allow sublane packing",&flow_.sublanes);
-        flowChange|=ImGui::Checkbox("Higher junction throughput",&flow_.compactAdmission);
-        if(flowChange) simulation_.setTrafficFlowSettings(flow_);
-        ImGui::TextWrapped("Predictive junctions use committed curves, exit-space checks and braking-aware following. Sublanes allow continuous movement into reachable side gaps. These replace tugging and RTS avoidance for native junction trips.");
-        if(!flow_.predictiveJunctions) {
-        bool recoveryChange=ImGui::Checkbox("Untangle stopped traffic",&trafficRecoverySettings_.enabled);
-        float recoveryDelay=static_cast<float>(trafficRecoverySettings_.stopSeconds);
-        recoveryChange|=ImGui::DragFloat("Untangle after (s)",&recoveryDelay,.1f,.1f,30,"%.1f",ImGuiSliderFlags_AlwaysClamp);
-        trafficRecoverySettings_.stopSeconds=recoveryDelay;
-        float recoveryRadius=static_cast<float>(trafficRecoverySettings_.radius);
-        recoveryChange|=ImGui::DragFloat("Junction replan radius (m)",&recoveryRadius,1.f,5.f,250.f,"%.0f",ImGuiSliderFlags_AlwaysClamp);
-        trafficRecoverySettings_.radius=recoveryRadius;
-        if(recoveryChange) simulation_.setTrafficRecoverySettings(trafficRecoverySettings_);
-        if(ImGui::Button("Untangle stopped traffic now")) {
-            double before=simulation_.totalTrafficRecoverySeconds();
-            simulation_.planStoppedTraffic(true);
-            planningTimeToExclude_+=simulation_.totalTrafficRecoverySeconds()-before;
+    if((workspace_==0 && engine_==SimulationEngine::Native) || (workspace_==5 && engine_==SimulationEngine::Sumo)) {
+    if(ImGui::CollapsingHeader("Monitoring")) {
+        if(sumo_) {
+            ImGui::Text("SUMO collisions: %llu",static_cast<unsigned long long>(sumo_->collisions()));
+            ImGui::Text("SUMO teleports: %llu",static_cast<unsigned long long>(sumo_->teleports()));
+            ImGui::Text("Open-junction handoffs: %llu",static_cast<unsigned long long>(sumo_->handoffs()));
+            ImGui::Text("Waiting off-network: %zu",sumo_->pending());
         }
-        ImGui::Text("Untangling: %llu repairs / %llu passes (last %.1f ms)",
-            static_cast<unsigned long long>(simulation_.trafficRecoveryRepairs()),
-            static_cast<unsigned long long>(simulation_.trafficRecoveryPasses()),simulation_.lastTrafficRecoveryMilliseconds());
-        ImGui::Text("Fleet routes mapped: %llu",static_cast<unsigned long long>(simulation_.lastFleetRouteCount()));
-        ImGui::TextWrapped("Verifies stopped vehicles against signals and obstacles. Junction conflicts freeze simulation time while nearby vehicles replan and preview coordinated movement, including reverse yields. Working routes outside the radius remain in place.");
-        }
-        ImGui::TextWrapped("Read-only collision checks use workers at 32+ active vehicles. Movement commits stay ordered. One worker disables parallel checks.");
-        bool change=ImGui::Checkbox("Remove stuck queue leaders",&stuckVehicleSettings_.enabled);
-        float timeout=static_cast<float>(stuckVehicleSettings_.timeoutSeconds);
-        change|=ImGui::DragFloat("Stuck timeout (s)",&timeout,1,1,3600,"%.0f",ImGuiSliderFlags_AlwaysClamp);
-        stuckVehicleSettings_.timeoutSeconds=timeout;
-        change|=ImGui::Checkbox("Delete stationary junction vehicles",&stuckVehicleSettings_.junctionEnabled);
-        change|=typedDouble("Junction stationary timeout (s)",&stuckVehicleSettings_.junctionTimeoutSeconds,1,3600,"%.2f");
-        if(change) simulation_.setStuckVehicleSettings(stuckVehicleSettings_);
-        ImGui::TextWrapped("After the timeout, remove one stationary front blocker holding up a queue. Red/yellow waits are protected. Allow 2 seconds for traffic to resume before another removal.");
-        ImGui::TextWrapped("The separate junction timeout deletes vehicles stationary at <= 0.05 m/s after entering the free junction, including blocked or signal waits there. Lane queues are excluded. Movement resets the timer. Pause adds no time; reset clears counters.");
+
+        bool changed=ImGui::Checkbox("Delete stopped in open junctions",&stuckVehicleSettings_.junctionEnabled);
+        changed|=typedDouble("Junction stationary timeout (s)",&stuckVehicleSettings_.junctionTimeoutSeconds,1,3600,"%.2f");
+        if(changed) simulation_.setStuckVehicleSettings(stuckVehicleSettings_);
+        ImGui::Text("Open-junction deletions: %llu",static_cast<unsigned long long>(simulation_.removedJunctionVehicles()));
         ImGui::Checkbox("Include finished / removed trips",&includeCompletedStops_);
         auto stats=simulation_.stopStatistics(includeCompletedStops_);
-        ImGui::Text("Vehicles: %llu | Ever stopped: %llu",static_cast<unsigned long long>(stats.vehicles),static_cast<unsigned long long>(stats.vehiclesThatStopped));
-        ImGui::Text("Mean / average: %.2f s",stats.meanSeconds);
-        ImGui::Text("Min: %.2f s | Max: %.2f s",stats.minSeconds,stats.maxSeconds);
-        ImGui::Text("Total across vehicles: %.2f s",stats.totalSeconds);
-        ImGui::TextWrapped("Cumulative time per vehicle at <= 0.05 m/s, measured from actual movement. Includes red lights and queues. Uses simulation seconds; pause adds no time. Reset clears statistics.");
-    }
-    if(!flow_.predictiveJunctions && ImGui::CollapsingHeader("RTS-style routing",ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool changed=ImGui::Checkbox("Enable RTS routing",&routing_.rtsStyle);
-        float look=static_cast<float>(routing_.lookAhead),interval=static_cast<float>(routing_.localInterval),weight=static_cast<float>(routing_.congestionWeight);
-        changed|=ImGui::SliderFloat("Look ahead (m)",&look,2,30,"%.1f");
-        changed|=ImGui::SliderFloat("Local update (s)",&interval,.1f,2,"%.2f");
-        changed|=ImGui::SliderFloat("Avoid congestion",&weight,0,5,"%.1f");
-        routing_.lookAhead=look; routing_.localInterval=interval; routing_.congestionWeight=weight;
-        changed|=ImGui::Checkbox("Reissue destination while moving",&routing_.refreshMovingRoutes);
-        float refresh=static_cast<float>(routing_.movingRefreshInterval);
-        changed|=ImGui::DragFloat("Moving refresh (s)",&refresh,.25f,.25f,120,"%.2f",ImGuiSliderFlags_AlwaysClamp);
-        routing_.movingRefreshInterval=refresh;
-        if(changed) simulation_.setRoutingSettings(routing_);
-        ImGui::Text("Destination refreshes: %llu / %llu attempts",static_cast<unsigned long long>(simulation_.destinationRefreshes()),static_cast<unsigned long long>(simulation_.destinationRefreshAttempts()));
-        ImGui::TextWrapped("Periodically reissue the original endpoint after this much moving time. Stopped time does not count. Road turns and signal approaches finish first. Active bypasses recheck sooner and can return mid-turn when clear; position, heading and speed are preserved.");
-        ImGui::TextWrapped("Detour around slow traffic when a gap fits, then rejoin the route. Follow moving queues and wait at signals.");
+        if(ImGui::BeginTable("Stopped time",3,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_SizingStretchSame)) {
+            ImGui::TableSetupColumn("Mean (s)");ImGui::TableSetupColumn("Min (s)");ImGui::TableSetupColumn("Max (s)");ImGui::TableHeadersRow();
+            ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%.2f",stats.meanSeconds);
+            ImGui::TableNextColumn();ImGui::Text("%.2f",stats.minSeconds);ImGui::TableNextColumn();ImGui::Text("%.2f",stats.maxSeconds);ImGui::EndTable();
+        }
     }
     ImGui::Checkbox("Show selected route",&routes_);
-    ImGui::Checkbox("Show preferred clearance",&showClearance_);
-    ImGui::TextWrapped("Vehicles reserve turn approaches. Persistent standstills pause admission and trigger a checked reverse maneuver.");
     }
     if(workspace_==3) {
     if(ImGui::CollapsingHeader("Vehicle population",ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -637,37 +711,38 @@ void SimulationView::controls() {
     };
     changed|=gaussianControl("Body length",profile.length,.2f,20);
     changed|=gaussianControl("Body width",profile.width,.15f,5);
-    changed|=gaussianControl("Preferred gap",profile.distance,0,10);
+    ImGui::SeparatorText("Car following");
+    changed|=typedDouble("Standstill gap (m)",&profile.minGap,0,20,"%.2f");
+    changed|=typedDouble("Time headway (s)",&profile.tau,.1,10,"%.2f");
+    changed|=typedDouble("Comfortable deceleration (m/s^2)",&profile.deceleration,.1,50,"%.2f");
+    profile.emergencyDeceleration=std::max(profile.emergencyDeceleration,profile.deceleration);
+    changed|=typedDouble("Emergency deceleration (m/s^2)",&profile.emergencyDeceleration,profile.deceleration,50,"%.2f");
+    changed|=typedDouble("Lateral planning gap (m)",&profile.lateralMinGap,0,3,"%.2f");
     ImGui::Text("Applied spawn share: %.2f%%",simulation_.spawnPercentages()[selectedKind_]);
     if (changed) simulation_.setProfile(static_cast<VehicleKind>(selectedKind_),profile);
-    ImGui::TextWrapped("New vehicles sample these distributions once at spawn. Zero standard deviation gives identical values.");
+
     if (ImGui::Button("Resample active vehicles")) simulation_.resampleMotion();
-    ImGui::TextWrapped("Body sizes and preferred gap are sampled at spawn. Motion resampling affects all active classes. Pairwise gap = smaller preferred distance.");
+
     }
     }
     if(workspace_==2) {
-    ImGui::SeparatorText("Signal control");
-    if(ImGui::Checkbox("Spread across red lights",&routing_.spreadAtSignals)) simulation_.setRoutingSettings(routing_);
-    ImGui::Text("Queue placements: %llu",static_cast<unsigned long long>(simulation_.signalPlacements()));
-    ImGui::Text("Planning passes: %llu",static_cast<unsigned long long>(simulation_.signalPlanningBatches()));
-    ImGui::Text("Last: %llu routes / %.1f ms",static_cast<unsigned long long>(simulation_.lastSignalPlanCount()),simulation_.lastSignalPlanningMilliseconds());
-    if(ImGui::Button("Plan all signal queues now")) {
-        double before=simulation_.totalSignalPlanningSeconds(); simulation_.planSignalQueues(true);
-        planningTimeToExclude_+=simulation_.totalSignalPlanningSeconds()-before;
-        status_="Signal routes prepared with the simulation clock held fixed.";
-    }
-    ImGui::TextWrapped("Signal queues are planned together before movement. Planning time is excluded from the running clock. Vehicles then advance together while keeping physical gaps.");
+
+    if(ImGui::CollapsingHeader("Add a light")) {
+    if(ImGui::Button("Place on road guide",ImVec2(-1,0))){cancelEditorAction();placingRoadSignal_=true;workspace_=1;running_=false;stepBatch_.cancel();}
     if(ImGui::Checkbox("Place stop line on map",&placeLight_) && placeLight_) { editorMode_=0; cancelPendingLine(); }
     if(ImGui::Button("Draw permissive light + exit")) { editorMode_=7; placeLight_=false; cancelPendingLine(); }
-    ImGui::TextWrapped("Draw the stop line, then its allowed exit across outgoing lanes. Vehicles whose route crosses that exit after this stop line may pass regardless of color and continue to their trip destination. Green PNG marks are no longer used.");
+
     ImGui::Checkbox("Vertical stop line",&verticalLine_);
-    ImGui::SliderFloat("Line length (m)",&stopLineLength_,.5f,40,"%.1f");
-    ImGui::TextWrapped("Each click adds an independent light without resetting traffic. Turn placement off when finished. You can also use the two-click Traffic-light line tool.");
+    ImGui::TextUnformatted("Line length (m)");ImGui::SetNextItemWidth(-1);ImGui::SliderFloat("##line_length",&stopLineLength_,.5f,40,"%.1f");
+
+    }
+
     ImGui::Text("%zu independent lights",lights_.size());
     if(!lights_.empty()) {
         selectedLight_=std::clamp(selectedLight_,0,static_cast<int>(lights_.size())-1);
         std::string selectedLabel="L"+std::to_string(selectedLight_);
-        if(ImGui::BeginCombo("Selected light",selectedLabel.c_str())) {
+        ImGui::TextUnformatted("Selected light");ImGui::SetNextItemWidth(-1);
+        if(ImGui::BeginCombo("##Selected light",selectedLabel.c_str())) {
             for(int i=0;i<static_cast<int>(lights_.size());++i) {
                 std::string label="L"+std::to_string(i);
                 if(ImGui::Selectable(label.c_str(),selectedLight_==i)) selectedLight_=i;
@@ -675,18 +750,27 @@ void SimulationView::controls() {
             ImGui::EndCombo();
         }
         auto& light=lights_[selectedLight_]; bool edit=ImGui::Checkbox("Enabled",&light.enabled);
+        if(light.anchorNode>=0)ImGui::Text("Road station: node %d",light.anchorNode);
+        auto phase=light.phase(simulation_.seconds());ImGui::SameLine();
+        ImGui::TextColored(phase==LightPhase::Red?ImVec4(1,.4f,.4f,1):phase==LightPhase::Yellow?ImVec4(1,.8f,.3f,1):ImVec4(.4f,1,.6f,1),"%s",phase==LightPhase::Red?"RED":phase==LightPhase::Yellow?"YELLOW":"GREEN");
+        if(ImGui::CollapsingHeader("Travel direction",ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto d=light.controlledDirection();const char* toward=std::abs(d.x)>std::abs(d.y)?(d.x>0?"right":"left"):(d.y>0?"down":"up");
+            ImGui::Text("OUT toward %s: obeys signal",toward);ImGui::TextDisabled("IN: reverse direction passes red");
+            if(ImGui::Button("Reverse IN / OUT",ImVec2(-1,0))){light.outDirection=d*-1;edit=true;}
+        }
         auto duration=[&](const char* label,double& v,double low,double high) { return typedDouble(label,&v,low,high,"%.3f"); };
+        if(ImGui::CollapsingHeader("Timing",ImGuiTreeNodeFlags_DefaultOpen)) {
         edit|=duration("Green (s)",light.greenSeconds,.1f,3600);
         edit|=duration("Yellow (s)",light.yellowSeconds,0,3600);
         edit|=duration("Red (s)",light.redSeconds,.1f,3600);
         edit|=duration("Offset (s)",light.offsetSeconds,0,10800);
-        ImGui::SeparatorText("Queue detector lines");
+        }
+        if(ImGui::CollapsingHeader("Queue detectors")) {
         edit|=duration("Occupancy window (s)",light.queueWindowSeconds,.1,3600);
         edit|=duration("Occupied threshold (%)",light.queueThresholdPercent,0,100);
-        if(edit) simulation_.setTrafficLights(lights_);
         auto queue=simulation_.trafficLightQueueStatus(light.id);
         ImGui::Text("Queue quality: line %d",queue.qualityLine);
-        ImGui::TextWrapped("Draw lines nearest to farthest upstream. Quality is the highest line occupied for the threshold percentage of a full rolling window. Occupied means any vehicle body touches the line, moving or stopped. Detector lines do not stop or remove vehicles.");
+
         if(ImGui::Button("Draw queue detector line")) {
             cancelPendingLine(); linkedLight_=selectedLight_; editorMode_=8; placeLight_=false;
             drawingRoad_=false; splittingRoad_=false; connectionFrom_=-1; roadDraft_.clear(); roadDraftWidths_.clear();
@@ -698,7 +782,8 @@ void SimulationView::controls() {
             const auto& detector=light.queueDetectors[i];
             auto found=std::find_if(queue.lines.begin(),queue.lines.end(),[&](const QueueDetectorStatus& s){return s.id==detector.id;});
             if(found!=queue.lines.end()) {
-                ImGui::Text("Line %zu: vehicle %s | %.1f%% | %.1f / %.1f s",i+1,found->occupied?"YES":"NO",found->occupiedPercent,found->observedSeconds,light.queueWindowSeconds);
+                ImGui::Text("Line %zu: vehicle %s | %.1f%%",i+1,found->occupied?"YES":"NO",found->occupiedPercent);
+                ImGui::TextDisabled("Observed %.1f / %.1f s",found->observedSeconds,light.queueWindowSeconds);
             }
             bool changed=false;
             if(i>0 && ImGui::SmallButton("Move nearer")) { std::swap(light.queueDetectors[i],light.queueDetectors[i-1]); changed=true; }
@@ -711,23 +796,37 @@ void SimulationView::controls() {
             ImGui::PopID();
             if(changed) { simulation_.setTrafficLights(lights_); break; }
         }
-        ImGui::TextDisabled("Detector edits restart that light's changed observation windows.");
-        ImGui::TextWrapped("Type seconds and press Enter to apply while running. The cycle uses the current clock, so an edit may change the phase immediately.");
-        auto phase=light.phase(simulation_.seconds());
-        ImGui::Text("Phase: %s",phase==LightPhase::Green?"GREEN":phase==LightPhase::Yellow?"YELLOW":"RED");
-        ImGui::Text("Type: %s",light.permissive?"Linked-exit permissive":"Normal");
+        }
+        if(ImGui::CollapsingHeader("Allowed exit")) {
+        ImGui::TextDisabled("%s",light.permissive?"Permission line linked":"No permission line");
         if(ImGui::Button(light.permissive?"Redraw allowed exit":"Set allowed exit for this light")) {
             editorMode_=7; placeLight_=false; cancelPendingLine();
             linkedStage_=1; linkedLight_=selectedLight_; pendingStopA_=light.a; pendingStopB_=light.b;
         }
         if(light.permissive && ImGui::Button("Remove red/yellow permission")) { light.permissive=false; simulation_.setTrafficLights(lights_); }
-        if(ImGui::Button("Remove selected light")) {
+        }
+        if(edit) simulation_.setTrafficLights(lights_);
+        ImGui::Spacing();ImGui::Separator();
+        if(ImGui::Button("Remove selected light",ImVec2(-1,0))) {
             cancelPendingLine(); if(editorMode_==7 || editorMode_==8) editorMode_=0;
             lights_.erase(lights_.begin()+selectedLight_);
             simulation_.setTrafficLights(lights_); syncSignalMask();
             selectedLight_=std::max(0,selectedLight_-1);
             status_="Light removed; traffic and simulation clock preserved.";
         }
+    }
+    if(engine_==SimulationEngine::Native && ImGui::CollapsingHeader("Native queue planning")) {
+    ImGui::SeparatorText("Signal control");
+    if(ImGui::Checkbox("Spread across red lights",&routing_.spreadAtSignals)) simulation_.setRoutingSettings(routing_);
+    ImGui::Text("Queue placements: %llu",static_cast<unsigned long long>(simulation_.signalPlacements()));
+    ImGui::Text("Planning passes: %llu",static_cast<unsigned long long>(simulation_.signalPlanningBatches()));
+    ImGui::Text("Last: %llu routes / %.1f ms",static_cast<unsigned long long>(simulation_.lastSignalPlanCount()),simulation_.lastSignalPlanningMilliseconds());
+    if(ImGui::Button("Plan all signal queues now")) {
+        double before=simulation_.totalSignalPlanningSeconds(); simulation_.planSignalQueues(true);
+        planningTimeToExclude_+=simulation_.totalSignalPlanningSeconds()-before;
+        status_="Signal routes prepared with the simulation clock held fixed.";
+    }
+
     }
     }
     if(workspace_==4) {
@@ -762,13 +861,15 @@ void SimulationView::controls() {
         source_=makeJunctionDemoMap(); graph_=makeJunctionDemoGraph(); pathNodes_.clear(); selectedNode_=-1; metersPerPixel_=1; lights_.clear(); editorMode_=0; linePending_=false; mapZoom_=1; mapPan_={};
         refreshMap(false); status_="Mixed-traffic demo: finite-width two-way lanes, side-by-side insertion, and a free junction. Mark destination nodes and add linked signal permissions independently.";
     }
-    ImGui::TextWrapped("Red: road | Arrows: directed lanes | Blue: signals | Cyan: linked signal permissions | D nodes: trip destinations | Pink: solid divider. Legacy green marks are treated as road.");
+
     }
     if(workspace_==1) {
-    ImGui::SeparatorText("Painting and markings");
-    const char* tools[]{"Inspect / simulate","Paint roads (red)","Erase / block (black)","Place road nodes","Allowed exit (selected light)","Traffic-light line (blue)","Lane divider (pink)","Permissive light + exit"};
-    if(ImGui::Combo("Edit tool",&editorMode_,tools,8)) {
-        cancelPendingLine(); strokeActive_=false; placeLight_=false;
+    if(ImGui::CollapsingHeader("Advanced markings")) {
+    ImGui::TextWrapped("Line tools use two clicks. Traffic lights and their timings are also available in Traffic lights.");
+    const char* tools[]{"Select / inspect","Paint road area","Erase area","Place road nodes","Allowed exit (selected light)","Traffic-light line","Lane divider","Permissive light + exit"};
+    int chosenTool=editorMode_;
+    if(ImGui::Combo("Marking tool",&chosenTool,tools,8)) {
+        cancelEditorAction(); editorMode_=chosenTool;
         if(editorMode_==4) {
             if(lights_.empty()) { editorMode_=0; status_="Add a traffic light before drawing its allowed exit."; }
             else { selectedLight_=std::clamp(selectedLight_,0,static_cast<int>(lights_.size())-1); editorMode_=7; linkedStage_=1; linkedLight_=selectedLight_; pendingStopA_=lights_[selectedLight_].a; pendingStopB_=lights_[selectedLight_].b; }
@@ -776,8 +877,8 @@ void SimulationView::controls() {
         if(editorMode_!=0 && editorMode_!=5 && editorMode_!=7) { running_=false; accumulator_=0; stepBatch_.cancel(); }
     }
     ImGui::SliderFloat("Brush width (m)",&brushWidth_,.2f,20,"%.1f");
-    ImGui::TextWrapped("Paint/erase: drag. Spawns: click a road. Lines: click both ends. Roads, spawns, exits and divider edits pause/reset traffic. Lights can be added and timed while running.");
-    if((linePending_ || linkedStage_>0) && ImGui::Button("Cancel pending line")) cancelPendingLine();
+    }
+    ImGui::TextWrapped("Save your design in File: Export map PNG and Save node network. Keep both files and their .signals companions together.");
     }
     if(workspace_==4) {
     ImGui::InputText("Save PNG path",savePath_,sizeof(savePath_));
@@ -789,99 +890,155 @@ void SimulationView::controls() {
     if(ImGui::Button("New blank map")) {
         int w=std::clamp(newWidth_,8,2048),h=std::clamp(newHeight_,8,2048);
         source_=Map(w,h,std::vector<Tile>(static_cast<std::size_t>(w)*h,Tile::Wall),metersPerPixel_);
-        lights_.clear(); lanes_.clear(); graph_={}; pathNodes_.clear(); selectedNode_=-1; editorMode_=1; linePending_=false; refreshMap(true); status_="Blank map ready. Paint roads, then place and connect nodes.";
+        lights_.clear(); lanes_.clear(); graph_={}; pathNodes_.clear(); selectedNode_=-1; editorMode_=1; linePending_=false; refreshMap(true);editorMode_=1; status_="Blank map ready. Paint roads, then place and connect nodes.";
     }
     }
-    if (!status_.empty()) { ImGui::Separator(); ImGui::TextWrapped("%s",status_.c_str()); }
     ImGui::PopItemWidth();
 }
-bool SimulationView::applyGraph(const NodeGraph& proposed) {
+bool SimulationView::applyGraph(const NodeGraph& input) {
+    auto proposed=input;proposed.pruneLaneTurns();
     try {
         for(const auto& node:proposed.nodes) if(!source_.contains(source_.pixel(node.position)) || !source_.walkable(source_.pixel(node.position))) throw std::invalid_argument("Nodes must lie on the road mask");
         Simulation check(source_,42); auto lanes=proposed.lanes();
-        if(std::any_of(proposed.connections.begin(),proposed.connections.end(),[](const auto& e){return e.roadType!=0;})) validateRoadMask(lanes,source_);
+        if(std::any_of(proposed.connections.begin(),proposed.connections.end(),[](const auto& e){return e.roadType!=0 || e.laneCount!=1 || e.reverseLaneCount>0 || !e.changeSections.empty() || !e.laneTurns.empty();})) validateRoadMask(lanes,source_);
         check.setLanes(std::move(lanes));
         graph_=proposed; lanes_=check.lanes(); running_=false; reset();
         status_="Node network applied; traffic reset."; return true;
     } catch(const std::exception& e) { status_=e.what(); return false; }
 }
-void SimulationView::nodePopup() {
-    if(!ImGui::BeginPopup("Node settings")) return;
-    if(selectedNode_>=0 && selectedNode_<static_cast<int>(graph_.nodes.size())) {
-        auto& node=graph_.nodes[selectedNode_];
-        ImGui::Text("Node %d (%.2f, %.2f m)",selectedNode_,node.position.x,node.position.y);
-        ImGui::Checkbox("Spawn point",&node.spawn);
-        if(node.spawn) {
-            if(ImGui::Checkbox("Exclude this node from its own spawn trips",&node.excludeOwnDestination)) simulation_.setSourceDestinationPolicy(selectedNode_,node.excludeOwnDestination);
-            ImGui::TextWrapped("Applies to new trips from this node only. Other origins may still finish here. Existing trips keep their destinations.");
-        }
-        ImGui::SeparatorText("Junction connections");
-        int approaches=0; for(const auto& road:graph_.connections) if(road.from==selectedNode_ || road.to==selectedNode_) ++approaches;
-        ImGui::Text("%d connected roads: %s",approaches,approaches==3?"T-junction":approaches==4?"4-way":"custom / merge / branch");
-        bool uturn=node.allowUTurn;
-        ImGui::BeginDisabled(node.openRadius>0);
-        if(ImGui::Checkbox("Allow U-turn connections",&uturn)) { auto proposed=graph_; proposed.nodes[selectedNode_].allowUTurn=uturn; applyGraph(proposed); ImGui::EndDisabled(); ImGui::EndPopup(); return; }
-        ImGui::EndDisabled();
-        if(node.openRadius>0) ImGui::TextDisabled("Free junctions already allow U-turn routes.");
-        ImGui::TextWrapped("One-way arms retain their direction; two-way arms connect both ways. Straight-through routes stay available. Connect a third road for a T-junction or a fourth for a crossroad. Paint room for the turns first.");
-        ImGui::TextUnformatted("New arm direction");
-        ImGui::Combo("##arm_direction",&newRoadType_,"Legacy centerline\0One-way road\0Two-way road\0");
-        ImGui::SliderInt("New arm lanes / direction",&newRoadLanes_,1,4);
-        ImGui::Separator();
-        bool turnChanged=ImGui::Checkbox("This node is a turn",&node.turn);
-        if(turnChanged && node.turn && node.openRadius>12 && node.turnRadius==12) node.turnRadius=node.openRadius;
-        if(node.turn) {
-            float braking=static_cast<float>(node.braking),radius=static_cast<float>(node.turnRadius);
-            if(ImGui::SliderFloat("Turn deceleration (m/s^2)",&braking,.1f,20,"%.2f")) { node.braking=braking; turnChanged=true; }
-            if(ImGui::SliderFloat("Turn influence radius (m)",&radius,.5f,500,"%.1f")) { node.turnRadius=radius; turnChanged=true; }
-            if(!urbanTraffic_.enabled) ImGui::TextWrapped("Enable Smooth mixed traffic to apply turn braking.");
-        } else ImGui::TextWrapped("Shape/width node: no turn slowdown. Mark this node as a turn to set its deceleration.");
-        if(turnChanged) { std::vector<TurnControl> controls; for(const auto& item:graph_.nodes) if(item.turn) controls.push_back({item.position,item.turnRadius,item.braking}); simulation_.setTurnControls(std::move(controls)); }
-        bool destination=node.destination;
-        if(ImGui::Checkbox("Trip destination (vehicles finish here)",&destination)) {
-            auto proposed=graph_; proposed.useExplicitDestinations(); proposed.nodes[selectedNode_].destination=destination;
-            applyGraph(proposed); ImGui::EndPopup(); return;
-        }
-        ImGui::TextWrapped("Unmarked lane endpoints inside an open junction connect to its exits automatically; they do not finish a trip.");
-        for(std::size_t r=0;r<graph_.connections.size();++r) {
-            const auto& road=graph_.connections[r]; if(road.from!=selectedNode_ && road.to!=selectedNode_) continue;
-            auto widths=shapeWidths(road); std::size_t point=road.from==selectedNode_?0:widths.size()-1;
-            ImGui::PushID(static_cast<int>(r)); ImGui::Text("Road %zu width at this node (m)",r);
-            float width=static_cast<float>(widths[point]);
-            if(ImGui::SliderFloat("##endpoint_width",&width,.5f,15,"%.2f")) {
-                widths[point]=width; auto proposed=graph_; proposed.connections[r].shapeWidths=widths;
-                applyGraph(proposed); ImGui::PopID(); ImGui::EndPopup(); return;
-            }
-            ImGui::PopID();
-        }
-        float radius=static_cast<float>(node.openRadius);
-        ImGui::TextUnformatted("Open junction radius (m), 0 = lane guided");
-        if(typedFloat("##open_radius",&radius,0,500,"%.2f")) {
-            auto proposed=graph_; proposed.nodes[selectedNode_].openRadius=radius;
+void SimulationView::roadSections(int road) {
+    if(road<0 || road>=static_cast<int>(graph_.connections.size())) return;
+    auto current=graph_.connections[road];
+    auto points=current.shape.empty()?std::vector<Vec2>{graph_.nodes[current.from].position,graph_.nodes[current.to].position}:current.shape;
+    double span=0; for(std::size_t i=1;i<points.size();++i) span+=length(points[i]-points[i-1]);
+
+    if(engine_==SimulationEngine::Sumo && !current.changeSections.empty()) {
+        if(ImGui::SmallButton("Section compatibility...")){manualChapter_=5;manualOpen_=true;}
+    }
+    if(engine_==SimulationEngine::Native && ImGui::CollapsingHeader("Lane-change sections")) {
+        typedDouble("Section start (m)",&sectionBegin_,0,span,"%.2f");
+        typedDouble("Section end (m)",&sectionEnd_,0,span,"%.2f");
+        ImGui::Combo("Direction",&sectionDirection_,"Both\0Forward\0Reverse\0");
+        int reverse=current.reverseLaneCount>0?current.reverseLaneCount:current.laneCount;
+        int count=sectionDirection_==1?current.laneCount:sectionDirection_==2?reverse:std::max(current.laneCount,reverse);
+        ImGui::InputInt("Lane (0 = all)",&sectionLane_);sectionLane_=std::clamp(sectionLane_,0,count);
+        ImGui::Checkbox("Allow entering",&sectionEnter_);ImGui::Checkbox("Allow leaving",&sectionExit_);
+        if(ImGui::Button("Add section")){
+            auto proposed=graph_;proposed.connections[road].changeSections.push_back({sectionBegin_,sectionEnd_,sectionDirection_-1,sectionLane_-1,sectionEnter_,sectionExit_});
             applyGraph(proposed);
-            ImGui::EndPopup(); return;
         }
-        ImGui::TextWrapped("Inside this boundary vehicles navigate the red mask freely toward their reserved exit. Road lanes end at the boundary. Changes reset traffic.");
-        typedDouble("Vehicles / s",&node.rate,0,100);
-        ImGui::TextWrapped("Spawn and braking settings apply live. A spawn node needs an outgoing path long enough to fit the vehicle.");
-        if(ImGui::Button("Connect one-way arm...")) { newRoadType_=1; connectionFrom_=selectedNode_; severing_=false; editorMode_=0; ImGui::CloseCurrentPopup(); }
-        if(ImGui::Button("Connect two-way arm...")) { newRoadType_=2; connectionFrom_=selectedNode_; severing_=false; editorMode_=0; ImGui::CloseCurrentPopup(); }
-        if(ImGui::Button("Connect to node...")) { connectionFrom_=selectedNode_; severing_=false; editorMode_=0; ImGui::CloseCurrentPopup(); }
-        if(ImGui::Button("Sever outgoing connection...")) { connectionFrom_=selectedNode_; severing_=true; editorMode_=0; ImGui::CloseCurrentPopup(); }
-        ImGui::TextUnformatted("Outgoing connections:");
-        for(const auto& edge:graph_.connections) { if(edge.from==selectedNode_) ImGui::BulletText("Node %d%s",edge.to,edge.roadType==2?" (two-way)":""); else if(edge.roadType==2 && edge.to==selectedNode_) ImGui::BulletText("Node %d (two-way)",edge.from); }
-        if(ImGui::Button("Start path selection here")) { pathNodes_={selectedNode_}; ImGui::CloseCurrentPopup(); }
+        for(std::size_t i=0;i<current.changeSections.size();++i){auto& rule=current.changeSections[i];ImGui::PushID(static_cast<int>(i));
+            ImGui::Text("%.1f - %.1f m | lane %d",rule.begin,rule.end,rule.lane+1);ImGui::SameLine();
+            bool remove=ImGui::SmallButton("Remove");ImGui::PopID();
+            if(remove){auto proposed=graph_;proposed.connections[road].changeSections.erase(proposed.connections[road].changeSections.begin()+i);applyGraph(proposed);break;}
+        }
+    }
+    if(current.roadType==2 && ImGui::CollapsingHeader("Mid-road U-turn opening",ImGuiTreeNodeFlags_DefaultOpen)) {
+        typedDouble("Opening start (m)",&openingBegin_,1,std::max(1.,span-1),"%.2f");
+        typedDouble("Opening end (m)",&openingEnd_,1,std::max(1.,span-1),"%.2f");
+
+        if(ImGui::Button("Insert optional U-turn opening")) {
+            try {
+                auto proposed=graph_;int node=proposed.addUTurnOpening(road,openingBegin_,openingEnd_);
+                if(applyGraph(proposed)) {pathNodes_.clear();selectedNode_=node;status_="U-turn opening added with straight-through connections preserved.";}
+            } catch(const std::exception& e) {status_=e.what();}
+        }
+    }
+}
+void SimulationView::nodePopup() {
+    auto viewport=ImGui::GetMainViewport();
+    ImGui::SetNextWindowSize(ImVec2(500,std::min(580.f,viewport->WorkSize.y-70)),ImGuiCond_Always);
+    if(!ImGui::BeginPopup("Node settings")) return;
+    if(selectedNode_<0 || selectedNode_>=static_cast<int>(graph_.nodes.size())) {ImGui::EndPopup();return;}
+    auto& node=graph_.nodes[selectedNode_];
+    ImGui::Text("Node %d",selectedNode_);ImGui::SameLine();ImGui::TextDisabled("%.2f, %.2f m",node.position.x,node.position.y);
+    ImGui::SameLine(ImGui::GetWindowWidth()-70);if(ImGui::SmallButton("Close"))ImGui::CloseCurrentPopup();
+    const char* tabs[]{"General","Roads","Lane exits","Signals","Junction"};
+    if(ImGui::BeginTabBar("Node panels")) {
+        for(int panel=0;panel<5;++panel) {
+            auto flags=nodePopupTab_==panel?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;
+            if(!ImGui::BeginTabItem(tabs[panel],nullptr,flags))continue;
+            if(nodePopupTab_==panel)nodePopupTab_=-1;
+            ImGui::BeginChild("Node content",ImVec2(0,0));
+            auto content=[&]() {
+                if(panel==2){
+                    ImGui::TextWrapped("Edit one incoming lane at a time beside the map. Pick lane numbers and click the outgoing lanes to see exactly where traffic can go.");
+                    if(ImGui::Button("Edit lane connections on map",ImVec2(-1,0))){
+                        cancelEditorAction();laneExitEditorOpen_=true;turnDraftNode_=-1;turnDirty_=false;workspace_=1;running_=false;stepBatch_.cancel();ImGui::CloseCurrentPopup();
+                    }
+                    return;
+                }
+                if(panel==3){roadSignalPopup();return;}
+                if(panel==0) {
+                    ImGui::SeparatorText("Trip endpoints");
+                    ImGui::Checkbox("Spawn vehicles here",&node.spawn);
+                    if(node.spawn) {
+                        typedDouble("Spawn rate (vehicles / s)",&node.rate,0,100);
+                        if(ImGui::Checkbox("Exclude this node from its own trips",&node.excludeOwnDestination))simulation_.setSourceDestinationPolicy(selectedNode_,node.excludeOwnDestination);
+                    }
+                    bool destination=node.destination;
+                    if(ImGui::Checkbox("Trip destination",&destination)) {auto proposed=graph_;proposed.useExplicitDestinations();proposed.nodes[selectedNode_].destination=destination;applyGraph(proposed);return;}
+                    ImGui::Spacing();ImGui::SeparatorText("Turn behavior");
+                    bool changed=ImGui::Checkbox("This node is a turn",&node.turn);
+                    if(changed && node.turn && node.openRadius>12 && node.turnRadius==12)node.turnRadius=node.openRadius;
+                    if(node.turn) {
+                        float braking=static_cast<float>(node.braking),radius=static_cast<float>(node.turnRadius);
+                        ImGui::TextUnformatted("Turn deceleration (m/s^2)");ImGui::SetNextItemWidth(-1);
+                        if(ImGui::SliderFloat("##turn_braking",&braking,.1f,20,"%.2f")){node.braking=braking;changed=true;}
+                        ImGui::TextUnformatted("Turn influence radius (m)");ImGui::SetNextItemWidth(-1);
+                        if(ImGui::SliderFloat("##turn_radius",&radius,.5f,500,"%.1f")){node.turnRadius=radius;changed=true;}
+                    }
+                    if(changed){std::vector<TurnControl> controls;for(const auto& n:graph_.nodes)if(n.turn)controls.push_back({n.position,n.turnRadius,n.braking});simulation_.setTurnControls(std::move(controls));}
+                }
+                if(panel==1) {
+                    ImGui::SeparatorText("Connect nodes");
+                    ImGui::TextUnformatted("New connection type");ImGui::SetNextItemWidth(-1);
+                    ImGui::Combo("##arm_direction",&newRoadType_,"Legacy centerline\0One-way road\0Two-way road\0");
+                    ImGui::TextUnformatted("Lanes per direction");ImGui::SetNextItemWidth(-1);ImGui::InputInt("##arm_lanes",&newRoadLanes_);newRoadLanes_=std::clamp(newRoadLanes_,1,maximumRoadLanes);
+                    if(ImGui::Button("Connect to another node",ImVec2(-1,0))){connectionFrom_=selectedNode_;severing_=false;editorMode_=0;ImGui::CloseCurrentPopup();}
+                    if(ImGui::Button("Sever a connection",ImVec2(-1,0))){connectionFrom_=selectedNode_;severing_=true;editorMode_=0;ImGui::CloseCurrentPopup();}
+                    if(ImGui::Button("Select path starting here",ImVec2(-1,0))){pathNodes_={selectedNode_};ImGui::CloseCurrentPopup();}
+                    ImGui::Spacing();ImGui::SeparatorText("Connected roads");
+                    for(std::size_t r=0;r<graph_.connections.size();++r) {
+                        const auto& road=graph_.connections[r];if(road.from!=selectedNode_ && road.to!=selectedNode_)continue;
+                        auto widths=shapeWidths(road);std::size_t point=road.from==selectedNode_?0:widths.size()-1;
+                        ImGui::PushID(static_cast<int>(r));ImGui::Text("Road %zu: node %d -> %d%s",r,road.from,road.to,road.roadType==2?" (two-way)":"");
+                        ImGui::TextUnformatted("Lane width at this node (m)");ImGui::SetNextItemWidth(-1);float width=static_cast<float>(widths[point]);
+                        if(ImGui::SliderFloat("##endpoint_width",&width,.5f,15,"%.2f")){widths[point]=width;auto proposed=graph_;proposed.connections[r].shapeWidths=widths;applyGraph(proposed);ImGui::PopID();return;}
+                        ImGui::PopID();
+                    }
+                }
+                if(panel==4) {
+                    ImGui::SeparatorText("Junction area");
+                    float radius=static_cast<float>(node.openRadius);
+                    if(typedFloat("Free junction radius (m), 0 = guided",&radius,0,500,"%.2f")){auto proposed=graph_;proposed.nodes[selectedNode_].openRadius=radius;applyGraph(proposed);return;}
+                    if(node.openRadius==0) {
+                        double extent=node.internalRadius;
+                        if(typedDouble("Guided junction extent (m), 0 = auto",&extent,0,500,"%.2f")){auto proposed=graph_;proposed.nodes[selectedNode_].internalRadius=extent;applyGraph(proposed);return;}
+                        bool uturn=node.allowUTurn;
+                        if(ImGui::Checkbox("Allow U-turn connections",&uturn)){auto proposed=graph_;proposed.nodes[selectedNode_].allowUTurn=uturn;applyGraph(proposed);return;}
+                    }
+                }
+            };
+            content();ImGui::EndChild();ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
     }
     ImGui::EndPopup();
 }
 void SimulationView::canvas() {
     const auto& map=source_;
-    ImVec2 size=ImGui::GetContentRegionAvail(); size.y=std::max(100.f,size.y-180);
+    ImVec2 size=ImGui::GetContentRegionAvail(); size.y=std::max(100.f,size.y-(showInspector_?230:24));
     ImGui::InvisibleButton("map",size);
     ImVec2 origin=ImGui::GetItemRectMin();
     auto* draw=ImGui::GetWindowDrawList();
     draw->AddRectFilled(origin,ImVec2(origin.x+size.x,origin.y+size.y),IM_COL32(16,21,29,255),8);
-    bool canvasHovered=ImGui::IsItemHovered(); const auto& io=ImGui::GetIO();
+    const ImVec2 canvasMin=ImGui::GetItemRectMin(),canvasMax=ImGui::GetItemRectMax();
+    const ImVec2 toolMin{canvasMin.x+12,canvasMax.y-52};
+    const ImVec2 toolSize{std::max(120.f,std::min(390.f,size.x-24)),40};
+    const ImVec2 toolMax{toolMin.x+toolSize.x,toolMin.y+toolSize.y};
+    bool overToolBar=editorActionActive() && ImGui::IsMouseHoveringRect(toolMin,toolMax);
+    bool canvasHovered=ImGui::IsItemHovered() && !overToolBar; const auto& io=ImGui::GetIO();
     if(canvasHovered && io.MouseWheel!=0) {
         float previous=mapZoom_; mapZoom_=std::clamp(mapZoom_*std::pow(1.2f,io.MouseWheel),.5f,40.f);
         double ratio=mapZoom_/previous,dx=io.MousePos.x-origin.x-size.x*.5,dy=io.MousePos.y-origin.y-size.y*.5;
@@ -922,33 +1079,85 @@ void SimulationView::canvas() {
     };
     for(const auto& node:graph_.nodes) if(node.openRadius>0) {
         draw->AddCircle(screen(node.position),static_cast<float>(node.openRadius/map.metersPerPixel*scale),IM_COL32(255,190,90,150),100,2);
-        auto label=screen(node.position); draw->AddText(ImVec2(label.x+8,label.y+8),IM_COL32(255,225,170,255),"OPEN JUNCTION - free navigation");
+        if(workspace_==1){auto label=screen(node.position);draw->AddText(ImVec2(label.x+8,label.y+8),IM_COL32(255,225,170,255),"Free junction");}
     }
-    for(const auto& lane:lanes_) if(lane.openJunction<0) {
+    for(const auto& lane:lanes_) if(lane.openJunction<0 && (!laneExitEditorOpen_ || lane.roadGroup>=0)) {
         ribbon(lane.points,lane.pointWidths,lane.width,lane.travelDirection?IM_COL32(140,180,255,60):IM_COL32(80,225,180,60),IM_COL32(180,230,235,190));
         drawLane(lane.points,IM_COL32(180,225,245,130));
+        if(laneExitEditorOpen_ && workspace_==1 && turnRoad_>=0 && selectedNode_>=0 && turnDraftNode_==selectedNode_ && lane.roadGroup==turnRoad_ && lane.travelDirection==turnDirection_ && lane.roadLane==turnLane_-1){
+            ribbon(lane.points,lane.pointWidths,lane.width,IM_COL32(255,210,70,100),IM_COL32(255,225,100,255));drawLane(lane.points,IM_COL32(255,230,100,255));
+        }
+        for(const auto& rule:lane.changeSections) {
+            double at=0;
+            for(std::size_t i=1;i<lane.points.size();++i) {
+                auto d=lane.points[i]-lane.points[i-1]; double span=length(d),a=std::max(at,rule.begin),b=std::min(at+span,rule.end);
+                if(b>a && span>1e-8 && (!rule.allowEnter || !rule.allowExit)) draw->AddLine(screen(lane.points[i-1]+d*((a-at)/span)),screen(lane.points[i-1]+d*((b-at)/span)),IM_COL32(255,120,80,210),4);
+                at+=span;
+            }
+        }
     }
     for(const auto& edge:graph_.connections) {
         bool chosen=false;
         for(std::size_t i=1;i<pathNodes_.size();++i) if((pathNodes_[i-1]==edge.from && pathNodes_[i]==edge.to) || (edge.roadType==2 && pathNodes_[i-1]==edge.to && pathNodes_[i]==edge.from)) chosen=true;
         auto shape=edge.shape.empty()?std::vector<Vec2>{graph_.nodes[edge.from].position,graph_.nodes[edge.to].position}:edge.shape;
-        if(chosen || edge.roadType==0 || splittingRoad_) drawLane(shape,chosen?IM_COL32(255,220,80,255):IM_COL32(220,220,220,170));
+        if(chosen || edge.roadType==0 || splittingRoad_ || placingRoadSignal_ || workspace_==1) drawLane(shape,chosen?IM_COL32(255,220,80,255):IM_COL32(220,220,220,170));
     }
     for(std::size_t n=0;n<graph_.nodes.size();++n) {
         const auto& node=graph_.nodes[n]; bool chosen=std::find(pathNodes_.begin(),pathNodes_.end(),static_cast<int>(n))!=pathNodes_.end();
         auto pos=screen(node.position);
         auto color=chosen?IM_COL32(255,220,80,255):node.spawn?IM_COL32(90,255,140,255):node.destination?IM_COL32(255,160,110,255):IM_COL32(130,220,255,255);
         draw->AddCircleFilled(pos,selectedNode_==static_cast<int>(n)?6.f:3.f,color);
-        if(chosen || node.spawn || node.destination || node.turn || selectedNode_==static_cast<int>(n)) {
-            auto label=std::to_string(n)+(node.spawn?" S":"")+(node.destination?" D":"")+(node.turn?" T":""); draw->AddText(ImVec2(pos.x+6,pos.y-13),color,label.c_str());
+        if(laneExitEditorOpen_ && workspace_==1 && selectedNode_>=0 && turnDraftNode_==selectedNode_ && std::find(highlightedExitNodes_.begin(),highlightedExitNodes_.end(),static_cast<int>(n))!=highlightedExitNodes_.end())draw->AddCircle(pos,11,IM_COL32(80,235,205,255),0,3);
+        if(node.roadStation)draw->AddCircle(pos,7,IM_COL32(120,230,255,230),0,2);
+        {
+            // Node ID badges are drawn after signals and vehicles so they stay legible.
         }
     }
-    bool hovered=ImGui::IsItemHovered();
+    bool hovered=canvasHovered;
     auto mouse=ImGui::GetIO().MousePos;
     Vec2 cursor{(mouse.x-origin.x)/scale*map.metersPerPixel,(mouse.y-origin.y)/scale*map.metersPerPixel};
     double snap=10*map.metersPerPixel/scale; int hitNode=-1;
     for(std::size_t n=0;n<graph_.nodes.size();++n) if(length(cursor-graph_.nodes[n].position)<snap) { snap=length(cursor-graph_.nodes[n].position); hitNode=static_cast<int>(n); }
-    if(splittingRoad_) {
+    if(laneExitEditorOpen_ && workspace_==1) {
+        const DirectedLane* source=nullptr;const DirectedLane* target=nullptr;
+        double nearest=9*map.metersPerPixel/scale;
+        for(const auto& lane:lanes_)if(lane.roadGroup>=0 && lane.openJunction<0 && lane.internalJunction<0 && !lane.points.empty()) {
+            if(lane.roadGroup==turnRoad_ && lane.travelDirection==turnDirection_ && lane.roadLane==turnLane_-1)source=&lane;
+            for(std::size_t point=1;point<lane.points.size();++point){
+                auto a=lane.points[point-1],d=lane.points[point]-a;double span=d.x*d.x+d.y*d.y;
+                double t=span>0?std::clamp(((cursor.x-a.x)*d.x+(cursor.y-a.y)*d.y)/span,0.,1.):0;
+                double gap=length(cursor-(a+d*t));if(hovered && gap<nearest){nearest=gap;target=&lane;}
+            }
+        }
+        if(hovered && target && ImGui::IsMouseClicked(0))toggleLaneExit(target->roadGroup,target->travelDirection,target->roadLane+1);
+        for(const auto& lane:lanes_)if(lane.roadGroup>=0 && lane.openJunction<0 && lane.internalJunction<0 && !lane.points.empty()){
+            bool chosen=false;
+            for(const auto& draft:turnExits_)if(draft.road==lane.roadGroup && draft.direction==lane.travelDirection){
+                auto picked=parseNumberList(draft.lanes.data(),1,graph_.directionalLaneCount(draft.road,draft.direction));chosen=std::find(picked.begin(),picked.end(),lane.roadLane+1)!=picked.end();break;
+            }
+            if(chosen || &lane==target){
+                auto color=chosen?IM_COL32(60,240,200,255):IM_COL32(190,245,255,255);
+                ribbon(lane.points,lane.pointWidths,lane.width,chosen?IM_COL32(60,240,200,90):IM_COL32(190,245,255,70),color);drawLane(lane.points,color);
+                auto at=screen(lane.points[(lane.points.size()-1)/4]);auto text="To lane "+std::to_string(lane.roadLane+1)+" (N"+std::to_string(lane.sourceNode)+" -> N"+std::to_string(lane.destinationNode)+")";
+                auto extent=ImGui::CalcTextSize(text.c_str());draw->AddRectFilled(ImVec2(at.x-3,at.y-19),ImVec2(at.x+extent.x+5,at.y),IM_COL32(8,16,27,245),3);draw->AddText(ImVec2(at.x,at.y-18),color,text.c_str());
+                if(chosen && source){
+                    auto a=screen(source->points.back()),b=screen(lane.points.front());
+                    Vec2 incoming=source->points.size()>1?source->points.back()-source->points[source->points.size()-2]:Vec2{1,0};
+                    Vec2 outgoing=lane.points.size()>1?lane.points[1]-lane.points.front():Vec2{1,0};
+                    double reach=length(lane.points.front()-source->points.back())*.35;
+                    auto c=screen(source->points.back()+incoming*(reach/std::max(.001,length(incoming))));
+                    auto d=screen(lane.points.front()-outgoing*(reach/std::max(.001,length(outgoing))));
+                    draw->AddBezierCubic(a,c,d,b,color,3);
+                    Vec2 unit=outgoing*(1/std::max(.001,length(outgoing)));auto tip=lane.points.front();
+                    double arrow=8*map.metersPerPixel/scale;auto base=tip-unit*arrow;Vec2 side{-unit.y*arrow*.5,unit.x*arrow*.5};
+                    draw->AddTriangleFilled(screen(tip),screen(base+side),screen(base-side),color);
+                }
+            }
+        }
+        if(source){auto at=screen(source->points[(source->points.size()-1)*2/3]);auto text="From lane "+std::to_string(turnLane_);auto extent=ImGui::CalcTextSize(text.c_str());draw->AddRectFilled(ImVec2(at.x,at.y+5),ImVec2(at.x+extent.x+8,at.y+25),IM_COL32(8,16,27,245),3);draw->AddText(ImVec2(at.x+4,at.y+7),IM_COL32(255,220,80,255),text.c_str());}
+        if(target && hovered)ImGui::SetTooltip("%s N%d -> N%d, lane %d", "Click to toggle:",target->sourceNode,target->destinationNode,target->roadLane+1);
+        hovered=false; // Lane picking owns map clicks; keep normal node and signal editors closed.
+    } else if(splittingRoad_ || placingRoadSignal_) {
         int nearest=-1; double gap=10*map.metersPerPixel/scale; Vec2 point;
         for(std::size_t r=0;r<graph_.connections.size();++r) {
             const auto& road=graph_.connections[r]; auto shape=road.shape.empty()?std::vector<Vec2>{graph_.nodes[road.from].position,graph_.nodes[road.to].position}:road.shape;
@@ -956,7 +1165,11 @@ void SimulationView::canvas() {
         }
         if(hovered && nearest>=0) {
             draw->AddCircleFilled(screen(point),6,IM_COL32(255,220,80,255));
-            if(ImGui::IsMouseClicked(0)) { try { auto proposed=graph_; int node=proposed.splitRoad(nearest,point); if(applyGraph(proposed)){selectedNode_=node;splittingRoad_=false;ImGui::OpenPopup("Node settings");} }catch(const std::exception& error){status_=error.what();} }
+            if(ImGui::IsMouseClicked(0)) {try {auto proposed=graph_;int node=proposed.splitRoad(nearest,point);
+                if(placingRoadSignal_){int degree=0;for(auto& road:proposed.connections)degree+=(road.from==node || road.to==node);if(degree==2)proposed.nodes[node].roadStation=true;}
+                bool signalStation=placingRoadSignal_;
+                if(applyGraph(proposed)){selectedNode_=node;nodePopupTab_=signalStation?3:4;turnRoad_=-1;highlightedExitNodes_.clear();ImGui::OpenPopup("Node settings");}
+            }catch(const std::exception& error){status_=error.what();}}
         }
     } else if(drawingRoad_) {
         std::vector<double> previewWidths=roadDraftWidths_; double count=newRoadLanes_*(newRoadType_==2?2:1);
@@ -991,10 +1204,10 @@ void SimulationView::canvas() {
                 } else if(ImGui::GetIO().KeyCtrl) {
                     if(!graph_.extendSelection(pathNodes_,hitNode)) status_="Ctrl-click a directly connected next node in travel order, or clear the selected path.";
                     selectedNode_=hitNode;
-                } else { selectedNode_=hitNode; selected_=0; ImGui::OpenPopup("Node settings"); }
+                } else { if(selectedNode_!=hitNode){turnRoad_=-1;highlightedExitNodes_.clear();}selectedNode_=hitNode; selected_=0; ImGui::OpenPopup("Node settings"); }
             } else if(editorMode_==3 && map.contains(map.pixel(cursor)) && map.walkable(map.pixel(cursor))) {
                 auto proposed=graph_; int node=proposed.addNode(cursor);
-                if(applyGraph(proposed)) { selectedNode_=node; ImGui::OpenPopup("Node settings"); }
+                if(applyGraph(proposed)) { editorMode_=3;selectedNode_=node; ImGui::OpenPopup("Node settings"); }
             }
         }
     } else if(editorMode_!=0) {
@@ -1080,6 +1293,16 @@ void SimulationView::canvas() {
             draw->AddCircle(screen(light.a),9,IM_COL32(255,255,255,255),0,2);
             draw->AddCircle(screen(light.b),5,IM_COL32(255,255,255,255),0,2);
         }
+        auto direction=light.controlledDirection();Vec2 side{-direction.y,direction.x};auto middle=(light.a+light.b)*.5;
+        double displayUnit=map.metersPerPixel/std::max(.001f,scale);
+        auto arrow=[&](Vec2 start,Vec2 end,ImU32 arrowColor){draw->AddLine(screen(start),screen(end),arrowColor,2);auto d=end-start;d=d*(1/std::max(1e-9,length(d)));auto base=end-d*(6*displayUnit);Vec2 cross{-d.y*3*displayUnit,d.x*3*displayUnit};draw->AddTriangleFilled(screen(end),screen(base+cross),screen(base-cross),arrowColor);};
+        {
+            auto offset=side*(16*displayUnit);
+            arrow(middle-direction*(36*displayUnit)+offset,middle+direction*(36*displayUnit)+offset,color);
+            arrow(middle+direction*(36*displayUnit)-offset,middle-direction*(36*displayUnit)-offset,IM_COL32(100,235,150,240));
+            auto tag=[&](Vec2 point,const char* text,ImU32 tint){auto at=screen(point);auto size=ImGui::CalcTextSize(text);at.x-=size.x*.5;at.y-=size.y*.5;draw->AddRectFilled(ImVec2(at.x-3,at.y-2),ImVec2(at.x+size.x+3,at.y+size.y+2),IM_COL32(16,21,29,235),3);draw->AddText(at,tint,text);};
+            tag(middle+offset,"OUT",color);tag(middle-offset,"IN",IM_COL32(100,235,150,255));
+        }
         auto queue=simulation_.trafficLightQueueStatus(light.id);
         char label[48]; std::snprintf(label,sizeof(label),"L%zu | queue %d",i,queue.qualityLine);
         auto p=screen(light.a); draw->AddText(ImVec2(p.x+8,p.y-9),color,label);
@@ -1105,8 +1328,9 @@ void SimulationView::canvas() {
     for (const auto& e:simulation_.entities()) {
         if(e.id==selected_ && e.signalLight>=0) draw->AddCircle(screen(e.signalTarget),5,IM_COL32(255,190,70,255),0,2);
         if (routes_ && e.id==selected_) {
-            for (std::size_t i=1;i<e.path.size();++i)
-                draw->AddLine(screen(e.path[i-1]),screen(e.path[i]),IM_COL32(255,211,98,170),2);
+            auto preview=sumo_ && !e.inOpenJunction?sumo_->routePreview(e.id):e.path;
+            for(std::size_t i=1;i<preview.size();++i)
+                draw->AddLine(screen(preview[i-1]),screen(preview[i]),IM_COL32(255,211,98,170),2);
         }
         ImVec2 p=screen(e.center);
         ImU32 colors[]{IM_COL32(150,225,145,255),IM_COL32(101,204,246,255),IM_COL32(177,171,255,255),IM_COL32(245,176,103,255),IM_COL32(244,140,177,255)};
@@ -1117,55 +1341,58 @@ void SimulationView::canvas() {
         Vec2 nose=e.center+Vec2{std::cos(e.heading),std::sin(e.heading)}*(e.length*.4);
         draw->AddLine(p,screen(nose),IM_COL32(30,35,45,255),2);
         if(showClearance_ || e.id==selected_) {
-            ImVec2 buffer[36]; int n=0;
-            for(int corner=0;corner<4;++corner) for(int arc=0;arc<=8;++arc) {
-                double a=e.heading+(corner+arc/8.0)*1.5707963267948966;
-                buffer[n++]=screen(box[corner]+Vec2{std::cos(a),std::sin(a)}*e.preferredDistance);
-            }
-            draw->AddPolyline(buffer,n,IM_COL32(160,210,245,95),1.f,ImDrawFlags_Closed);
+            Vec2 forward{std::cos(e.heading),std::sin(e.heading)};
+            auto front=e.center+forward*(e.length*.5);
+            draw->AddLine(screen(front),screen(front+forward*(e.minGap+e.speed*e.tau)),IM_COL32(160,210,245,170),2);
         }
         auto mouse=ImGui::GetIO().MousePos;
         double mx=(mouse.x-p.x)*map.metersPerPixel/scale,my=(mouse.y-p.y)*map.metersPerPixel/scale;
         double along=mx*std::cos(e.heading)+my*std::sin(e.heading),across=-mx*std::sin(e.heading)+my*std::cos(e.heading);
         if (hovered && hitNode<0 && std::abs(along)<e.length/2+.15 && std::abs(across)<e.width/2+.15) {
-            const char* state=e.reversing?"\nReversing to yield":e.signalLight!=-1?(e.next>=e.path.size()?"\nWaiting in stop-line slot":"\nFilling stop-line space"):e.waitingForLight?"\nWaiting for signal":e.tugActive?"\nForce-guided: momentum and torque":e.waitingForManeuver?"\nWaiting for reserved maneuver":e.usingLocalDetour?"\nLocal detour":e.following?"\nFollowing traffic":"";
-            ImGui::SetTooltip("%s %llu\nSpeed %.2f / %.2f m/s\nBody %.2f x %.2f m | %.0f kg\nPreferred gap %.2f m%s",vehicleName(e.kind),static_cast<unsigned long long>(e.id),e.speed,e.desiredSpeed,e.length,e.width,e.massKg,e.preferredDistance,state);
-            if (editorMode_==0 && !placeLight_ && ImGui::IsMouseClicked(0)) selected_=e.id;
+            const char* state=e.inOpenJunction?"\nNative free-junction movement":sumo_?"\nSUMO lane / guided-junction movement":"\nNative lane / junction movement";
+            ImGui::SetTooltip("%s %llu\nSpeed %.2f / %.2f m/s\nBody %.2f x %.2f m | %.0f kg\nStandstill gap %.2f m | headway %.2f s%s",vehicleName(e.kind),static_cast<unsigned long long>(e.id),e.speed,e.desiredSpeed,e.length,e.width,e.massKg,e.minGap,e.tau,state);
+            if (editorMode_==0 && !placeLight_ && ImGui::IsMouseClicked(0)) {selected_=e.id;showInspector_=true;}
         }
+    }
+    // Fixed-size badges sit above all map content, with leaders back to nodes.
+    std::vector<ImVec4> nodeBadgeBounds;
+    for(std::size_t n=0;n<graph_.nodes.size();++n){const auto& node=graph_.nodes[n];auto point=screen(node.position);if(point.x<canvasMin.x || point.x>canvasMax.x || point.y<canvasMin.y || point.y>canvasMax.y)continue;
+        bool signal=std::any_of(lights_.begin(),lights_.end(),[&](const auto& light){if(light.anchorNode==static_cast<int>(n))return true;auto mid=(light.a+light.b)*.5;return length(mid-node.position)<2*map.metersPerPixel;});
+        auto text="N"+std::to_string(n);float font=ImGui::GetFontSize()+2;auto extent=ImGui::CalcTextSize(text.c_str());float width=extent.x*font/ImGui::GetFontSize()+16,height=font+10;
+        ImVec2 at;for(int candidate=0;candidate<12;++candidate){float dx=signal?48.f:18.f,dy=signal?-58.f:-36.f;at={std::clamp(point.x+(candidate%2?-width-dx:dx),canvasMin.x+4,canvasMax.x-width-4),std::clamp(point.y+dy+(candidate/2)*34,canvasMin.y+4,canvasMax.y-height-4)};bool occupied=false;for(auto box:nodeBadgeBounds)if(at.x<box.z+5 && at.x+width>box.x-5 && at.y<box.w+5 && at.y+height>box.y-5)occupied=true;if(!occupied)break;}
+        auto border=selectedNode_==static_cast<int>(n)?IM_COL32(255,215,70,255):IM_COL32(140,220,255,255);draw->AddLine(point,ImVec2(at.x+width*.5f,at.y+height*.5f),border,1.5f);
+        draw->AddRectFilled(at,ImVec2(at.x+width,at.y+height),IM_COL32(8,16,27,250),5);draw->AddRect(at,ImVec2(at.x+width,at.y+height),border,5.f,2.f,0);
+        draw->AddText(ImGui::GetFont(),font,ImVec2(at.x+8,at.y+5),IM_COL32(255,255,255,255),text.c_str());nodeBadgeBounds.push_back({at.x,at.y,at.x+width,at.y+height});
+        if(canvasHovered && ImGui::IsMouseHoveringRect(at,ImVec2(at.x+width,at.y+height)))ImGui::SetTooltip("Node %zu%s%s%s",n,node.spawn?" | spawn":"",node.destination?" | destination":"",signal?" | traffic light":"");
     }
     draw->PopClipRect();
     nodePopup();
-    ImGui::TextDisabled("%.1f x %.1f m | %.3f m/pixel | Bike / Motorbike / Car / Truck / Bus",map.width*map.metersPerPixel,map.height*map.metersPerPixel,map.metersPerPixel);
+    if(editorActionActive()) {
+        auto saved=ImGui::GetCursorScreenPos();ImGui::SetCursorScreenPos(toolMin);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.07f,.09f,.12f,.97f));
+        ImGui::BeginChild("Active tool",toolSize,ImGuiChildFlags_Borders,ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse);
+        if(ImGui::Button("Cancel (Esc)"))cancelEditorAction();
+        ImGui::SameLine();if(editorActionActive())ImGui::TextUnformatted(editorActionLabel());
+        ImGui::EndChild();ImGui::PopStyleColor();ImGui::SetCursorScreenPos(saved);
+    }
+    ImGui::TextDisabled("%.1f x %.1f m | %.3f m/pixel",map.width*map.metersPerPixel,map.height*map.metersPerPixel,map.metersPerPixel);
 }
 void SimulationView::inspector() {
     ImGui::SeparatorText("Vehicle inspector");
-    ImGui::TextDisabled("Click a vehicle on the map to select it.");
     const Entity* selected=nullptr;
     for (const auto& e:simulation_.entities()) if (e.id==selected_) selected=&e;
     if (!selected) { ImGui::TextUnformatted("No active vehicle selected."); return; }
-    ImGui::Text("%s %llu | %.2f m/s | %.2f x %.2f m | preferred gap %.2f m",vehicleName(selected->kind),static_cast<unsigned long long>(selected->id),selected->speed,selected->length,selected->width,selected->preferredDistance);
-    ImGui::TextDisabled("%s | %.1fs without 0.25m progress",selected->reversing?"Yielding in reverse":selected->signalLight!=-1?(selected->next>=selected->path.size()?"Waiting at stop line":"Filling stop-line space"):selected->waitingForLight?"Waiting for signal":selected->waitingForManeuver?"Waiting for maneuver":selected->usingLocalDetour?"Local detour":selected->following?"Following traffic":"Driving / queueing",selected->noProgressSeconds);
+    ImGui::Text("%s %llu | %.2f m/s | %.2f x %.2f m | standstill gap %.2f m | headway %.2f s",vehicleName(selected->kind),static_cast<unsigned long long>(selected->id),selected->speed,selected->length,selected->width,selected->minGap,selected->tau);
+    ImGui::TextDisabled("Controller: %s",selected->inOpenJunction?"native free junction":sumo_?"SUMO lane / guided junction":"native lane / junction");
     ImGui::Text("Stopped: total %.2f s | current %.2f s | longest %.2f s | trip %.2f s",
         selected->stoppedSeconds,selected->currentStopSeconds,selected->longestStopSeconds,selected->ageSeconds);
     if(selected->inOpenJunction) ImGui::Text("Stationary inside junction: %.2f s / %.2f s%s",selected->junctionStationarySeconds,stuckVehicleSettings_.junctionTimeoutSeconds,stuckVehicleSettings_.junctionEnabled?"":" (deletion disabled)");
     if(!selected->junctionStatus.empty()) ImGui::TextWrapped("Junction: %s",selected->junctionStatus.c_str());
+    if(selected->internalJunction>=0) ImGui::Text("Guided junction connector: node %d",selected->internalJunction);
+    if(selected->escapingGridlock) ImGui::TextColored(ImVec4(1,.65f,.2f,1),"Stale reservations released; physical contact remains enforced");
     ImGui::Text("Trip origin: lane %d | spawn node %d",selected->spawnLane,selected->spawnNode);
     ImGui::TextWrapped("Lane change: %s | completed by this vehicle: %llu",selected->laneChangeStatus.c_str(),static_cast<unsigned long long>(selected->laneChanges));
-    if(flow_.sublanes) ImGui::TextWrapped("Within-lane gap: %s",selected->sublaneStatus.c_str());
-    if(selected->cooperativeUntil>simulation_.seconds()) ImGui::Text("Creating gap for vehicle %llu",static_cast<unsigned long long>(selected->cooperativeFor));
-    ImGui::TextWrapped("Verified state: %s",stopReasonName(simulation_.stopReason(*selected)));
-    if(simulation_.ownsNegotiatedTurn(*selected)) ImGui::TextColored(ImVec4(1,.75f,.2f,1),"Turn priority: creeping through claimed space");
-    else if(auto owner=simulation_.maneuverYieldTo(*selected)) ImGui::Text("%s vehicle %llu",selected->clearingTurn?"Clearing space for":"Yielding to",static_cast<unsigned long long>(owner));
-    ImGui::Text("Force guidance: %s | mass %.0f kg | yaw %.2f rad/s",selected->tugActive?"Active":"Standby",selected->massKg,selected->angularVelocity);
-    float mass=static_cast<float>(selected->massKg);
-    if(ImGui::DragFloat("Vehicle mass (kg)",&mass,10,20,100000,"%.0f",ImGuiSliderFlags_AlwaysClamp)) simulation_.setEntityMass(selected->id,mass);
-    ImGui::Text("Destination refreshes: %llu | Moving timer: %.2f s",static_cast<unsigned long long>(selected->destinationRefreshes),selected->movingSinceRefresh);
-    double redDistance=0; int nearestRed=simulation_.closestStoppingLight(*selected,&redDistance);
-    if(nearestRed>=0) ImGui::Text("Nearest required stop: L%d | %.2f m along route",nearestRed,redDistance);
-    if(!lights_.empty()) {
-        const auto& light=lights_[std::clamp(selectedLight_,0,static_cast<int>(lights_.size())-1)];
-        if(light.permissive) ImGui::Text("Selected light red/yellow: %s",simulation_.routePermitsRed(*selected,light)?"Allowed by planned route":"Must stop");
-    }
+    if(selected->inOpenJunction)ImGui::TextWrapped("Native free controller: %s",stopReasonName(simulation_.stopReason(*selected)));
     float speed=static_cast<float>(selected->desiredSpeed),accel=static_cast<float>(selected->acceleration);
     ImGui::SetNextItemWidth(230);
     bool changed=ImGui::SliderFloat("Desired speed",&speed,0.05f,50,"%.2f");

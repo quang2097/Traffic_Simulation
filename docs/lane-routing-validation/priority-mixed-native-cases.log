@@ -1,0 +1,22 @@
+Start testing: Nov 22 02:52 SE Asia Standard Time
+----------------------------------------------------------
+1/18 Testing: junction_priority
+1/18 Test: junction_priority
+Command: "D:/whateveraboutit/Traffic_Simulation/build/junction_priority_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"junction_priority" start time: Nov 22 02:52 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Priority ordering, default-off relief, starvation grant, non-conflicts, required exits, station geometry and persistence passed
+User map seed 7: 62 arrived, 52 active, 0 collisions, 0 deleted
+User map seed 42: 25 arrived, 58 active, 0 collisions, 0 deleted
+User map seed 123: 21 arrived, 56 active, 0 collisions, 0 deleted
+<end of output>
+Test time = 139.65 sec
+----------------------------------------------------------
+Test Passed.
+"junction_priority" end time: Nov 22 02:55 SE Asia Standard Time
+"junction_priority" time elapsed: 00:02:19
+----------------------------------------------------------
+
+End testing: Nov 22 02:55 SE Asia Standard Time

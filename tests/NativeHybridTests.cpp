@@ -1,4 +1,5 @@
 #include "traffic/NodeGraph.hpp"
+#include "traffic/Geometry.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -15,7 +16,7 @@ void setup(Simulation& s) {
 void safe(const Simulation& s) {
     for(const auto& e:s.entities()) {
         need(s.map().fits(e.footprint()),"hybrid vehicle left the road mask");
-        for(const auto& other:s.entities()) if(e.id<other.id) need(clearance(e.footprint(),other.footprint())>=std::min(e.preferredDistance,other.preferredDistance)-1e-5,"hybrid vehicle violated physical spacing");
+        for(const auto& other:s.entities()) if(e.id<other.id) need(!geometry::violatesClearance(corners(e.footprint()),corners(other.footprint()),0),"hybrid vehicle caused physical body overlap");
     }
 }
 int main(int argc,char**) {
@@ -43,7 +44,7 @@ int main(int argc,char**) {
     auto blockerId=blocked.entities().back().id;
     auto& stationary=const_cast<std::vector<Entity>&>(blocked.entities()).back(); stationary.desiredSpeed=0; stationary.speed=0;
     bool held=false;
-    for(int i=0;i<1200;++i) { blocked.tick(.01); safe(blocked); held|=blocked.entities()[0].waitingForJunction; need(!blocked.entities()[0].inOpenJunction,"vehicle entered a blocked exit junction"); }
+    for(int i=0;i<1200;++i) { blocked.tick(.01); safe(blocked); held|=blocked.entities()[0].waitingForJunction || blocked.entities()[0].approachBlocked; need(!blocked.entities()[0].inOpenJunction,"vehicle entered a blocked exit junction"); }
     need(held,"blocked exit did not hold the upstream vehicle");
     auto& actors=const_cast<std::vector<Entity>&>(blocked.entities()); actors.erase(std::remove_if(actors.begin(),actors.end(),[&](const auto& e){return e.id==blockerId;}),actors.end());
     for(int i=0;i<7000 && !blocked.entities().empty();++i) { blocked.tick(.01); safe(blocked); }

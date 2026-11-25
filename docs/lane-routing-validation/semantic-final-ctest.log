@@ -1,0 +1,43 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+      Start 15: sumo_map_demo
+      Start  8: sumo_lanes
+ 1/19 Test  #8: sumo_lanes .......................   Passed   11.91 sec
+      Start 10: sumo_mixed_free
+ 2/19 Test #15: sumo_map_demo ....................   Passed   13.25 sec
+      Start  9: sumo_free_handoff
+ 3/19 Test  #9: sumo_free_handoff ................   Passed    5.61 sec
+      Start 11: sumo_repeated_handoffs
+ 4/19 Test #10: sumo_mixed_free ..................   Passed    7.89 sec
+      Start 18: simulation_engine_switch
+ 5/19 Test #11: sumo_repeated_handoffs ...........   Passed    3.32 sec
+      Start  7: sumo_directional_signals
+ 6/19 Test #18: simulation_engine_switch .........   Passed    2.40 sec
+      Start 12: sumo_live_signals
+ 7/19 Test #12: sumo_live_signals ................   Passed    1.60 sec
+      Start  5: sumo_lane_connections
+ 8/19 Test  #7: sumo_directional_signals .........   Passed    2.13 sec
+      Start  6: sumo_closed_lane
+ 9/19 Test  #5: sumo_lane_connections ............   Passed    1.38 sec
+      Start 14: sumo_free_permissions
+10/19 Test  #6: sumo_closed_lane .................   Passed    1.13 sec
+      Start 13: sumo_signal_permissions
+11/19 Test #14: sumo_free_permissions ............   Passed    1.21 sec
+      Start 16: sumo_ui_startup
+12/19 Test #13: sumo_signal_permissions ..........   Passed    1.11 sec
+      Start  2: sumo_semantic_lanes
+13/19 Test #16: sumo_ui_startup ..................   Passed    1.09 sec
+      Start  4: native_directional_signals
+14/19 Test  #2: sumo_semantic_lanes ..............   Passed    1.33 sec
+      Start  1: native_semantic_lanes
+15/19 Test  #1: native_semantic_lanes ............   Passed    0.18 sec
+      Start  3: lane_connections
+16/19 Test  #3: lane_connections .................   Passed    0.12 sec
+      Start 17: native_ui_startup
+17/19 Test #17: native_ui_startup ................   Passed    0.06 sec
+      Start 19: editor_tools_and_manual
+18/19 Test #19: editor_tools_and_manual ..........   Passed    0.11 sec
+19/19 Test  #4: native_directional_signals .......   Passed    1.69 sec
+
+100% tests passed out of 19
+
+Total Test time (real) =  29.30 sec

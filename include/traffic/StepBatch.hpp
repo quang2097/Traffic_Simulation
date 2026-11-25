@@ -21,6 +21,9 @@ public:
     template<class Advance> bool advanceOne(Advance&& advance) {
         if(!active()) return false;
         advance(tickSeconds_);
+        // The callback can cancel a batch after an engine error. Do not
+        // underflow the counter and turn that cancellation into an endless run.
+        if(!remainingTicks_) return false;
         --remainingTicks_; return true;
     }
     void cancel() { requested_=tickSeconds_=0; totalTicks_=remainingTicks_=0; }

@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-20",
+  "runtime": "Eclipse SUMO 1.28.0",
+  "step_seconds": 0.1,
+  "cases": [
+    {
+      "test": "sumo_mixed_free",
+      "passed": true,
+      "admitted": 48,
+      "completed": 48,
+      "active": 0,
+      "pending": 0,
+      "sumo_collision_involvements": 0,
+      "body_overlaps": 0,
+      "teleport_starts": 0,
+      "free_handoffs": 48,
+      "seed": 42
+    },
+    {
+      "test": "sumo_lanes",
+      "passed": true,
+      "admitted": 240,
+      "completed": 240,
+      "active": 0,
+      "pending": 0,
+      "sumo_collision_involvements": 0,
+      "body_overlaps": 0,
+      "teleport_starts": 0,
+      "free_handoffs": 0,
+      "seed": 42
+    },
+    {
+      "test": "sumo_map_demo",
+      "passed": true,
+      "admitted": 240,
+      "completed": 240,
+      "active": 0,
+      "pending": 0,
+      "sumo_collision_involvements": 0,
+      "body_overlaps": 0,
+      "teleport_starts": 0,
+      "free_handoffs": 0,
+      "seed": 42
+    },
+    {
+      "test": "sumo_repeated_handoffs",
+      "passed": true,
+      "admitted": 12,
+      "completed": 12,
+      "active": 0,
+      "pending": 0,
+      "sumo_collision_involvements": 0,
+      "body_overlaps": 0,
+      "teleport_starts": 0,
+      "free_handoffs": 24,
+      "seed": 42
+    },
+    {
+      "test": "sumo_ui_startup",
+      "passed": true,
+      "seed": 42
+    },
+    {
+      "test": "sumo_free_handoff",
+      "passed": true,
+      "admitted": 48,
+      "completed": 48,
+      "active": 0,
+      "pending": 0,
+      "sumo_collision_involvements": 0,
+      "body_overlaps": 0,
+      "teleport_starts": 0,
+      "free_handoffs": 48,
+      "seed": 42
+    },
+    {
+      "test": "sumo_live_signals",
+      "passed": true,
+      "seed": 7
+    },
+    {
+      "test": "sumo_free_permissions",
+      "passed": true,
+      "seed": 7
+    },
+    {
+      "test": "sumo_signal_permissions",
+      "passed": true,
+      "seed": 7
+    }
+  ],
+  "network_seed": 42,
+  "signal_seed": 7
+}

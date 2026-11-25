@@ -16,6 +16,7 @@ const char* stopReasonName(StopReason reason) {
     case StopReason::Road: return "Legal stop: road boundary / obstruction";
     case StopReason::Yielding: return "Planned reverse yield";
     case StopReason::Deadlock: return "Circular vehicle blockage: coordinated yield";
+    case StopReason::PriorityYield: return "Legal stop: yielding to path priority";
     case StopReason::ManeuverYield: return "Legal stop: yielding to negotiated turn";
     case StopReason::BlockedExit: return "Legal stop: waiting for clear turn exit";
     default: return "Unexplained stop: fleet recovery required";
@@ -43,11 +44,12 @@ Footprint Simulation::stopProbe(const Entity& e) const {
 StopReason Simulation::stopReason(const Entity& e) const {
     if(e.reversing) return StopReason::Yielding;
     if(e.speed>stoppedSpeedThreshold) return StopReason::Moving;
+    if(e.priorityYielding)return StopReason::PriorityYield;
     if(e.waitingForJunction) return StopReason::BlockedExit;
     if(e.turnExitBlocked) return e.deadlocked?StopReason::Deadlock:StopReason::BlockedExit;
     if(maneuverYieldTo(e) && !e.clearingTurn) return StopReason::ManeuverYield;
     if(length(e.goal-e.center)<.25) {
-        if(e.inOpenJunction && e.networkStage+1<e.networkRoute.size()) return e.currentStopSeconds>trafficRecoverySettings_.stopSeconds?StopReason::Unexplained:StopReason::Starting;
+        if(e.onJunction() && e.networkStage+1<e.networkRoute.size()) return e.currentStopSeconds>trafficRecoverySettings_.stopSeconds?StopReason::Unexplained:StopReason::Starting;
         return StopReason::Arrived;
     }
     // Verify current geometry and phases, never trust cached waiting flags.
@@ -59,7 +61,7 @@ StopReason Simulation::stopReason(const Entity& e) const {
        !lightStops(lights_[e.signalLight],e) && e.next>=e.path.size()) return StopReason::Starting;
     double pad; auto sweep=geometry::swept(from,to,pad);
     for(const auto& other:entities_) if(other.id!=e.id) {
-        double gap=std::min(e.preferredDistance,other.preferredDistance);
+        double gap=movementGap(e,other);
         // Existing undersized gaps must be allowed to separate in recovery.
         if(!geometry::motionClearance(from,to,other.footprint(),gap,true)) return e.deadlocked?StopReason::Deadlock:StopReason::Vehicle;
     }
@@ -75,6 +77,7 @@ void Simulation::setTrafficRecoverySettings(TrafficRecoverySettings settings) {
     trafficRecoverySettings_=settings;
 }
 void Simulation::planStoppedTraffic(bool force) {
+    if(std::any_of(entities_.begin(),entities_.end(),[](const Entity& e){return e.escapingGridlock;})) return;
     if(recoveryPreview_ || (!force && (!trafficRecoverySettings_.enabled || seconds_<nextTrafficRecoveryCheck_))) return;
     nextTrafficRecoveryCheck_=seconds_+.25;
     std::vector<std::size_t> seeds,group;
@@ -90,7 +93,7 @@ void Simulation::planStoppedTraffic(bool force) {
         }
         auto from=entities_[i].footprint(),to=stopProbe(entities_[i]);
         for(std::size_t j=0;j<entities_.size();++j) if(i!=j &&
-            !geometry::motionClearance(from,to,entities_[j].footprint(),std::min(entities_[i].preferredDistance,entities_[j].preferredDistance),true)) {
+            !geometry::motionClearance(from,to,entities_[j].footprint(),movementGap(entities_[i],entities_[j]),true)) {
             blocker[i]=static_cast<int>(j); break;
         }
     }
@@ -147,7 +150,7 @@ void Simulation::planStoppedTraffic(bool force) {
         to.center=to.center-Vec2{std::cos(from.heading),std::sin(from.heading)}*.75;
         for(std::size_t j=0;j<entities_.size();++j) if(j!=i && entities_[j].laneRoute.empty() && entities_[j].speed<=stoppedSpeedThreshold &&
             (reasons[j]==StopReason::Vehicle || reasons[j]==StopReason::BlockedExit) && std::find(group.begin(),group.end(),j)==group.end() &&
-            !geometry::motionClearance(from,to,entities_[j].footprint(),std::min(entities_[i].preferredDistance,entities_[j].preferredDistance),true)) group.push_back(j);
+            !geometry::motionClearance(from,to,entities_[j].footprint(),movementGap(entities_[i],entities_[j]),true)) group.push_back(j);
     }
     // Map the entire fleet to its original endpoints in one private world.
     // Working committed curves and legal signal approaches remain in place;

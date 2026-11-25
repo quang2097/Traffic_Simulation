@@ -1,0 +1,9 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+    Start  2: native_directional_signals
+1/2 Test  #2: native_directional_signals .......   Passed    1.50 sec
+    Start 17: editor_tools_and_manual
+2/2 Test #17: editor_tools_and_manual ..........   Passed    0.10 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   1.62 sec

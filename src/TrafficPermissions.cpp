@@ -18,7 +18,7 @@ bool Simulation::routePermitsRed(const Entity& e,const TrafficLight& light) cons
     bool passedStop=false,allowed=false; Vec2 previous=e.center;
     auto segment=[&](Vec2 next) {
         double stop=0,exit=0;
-        bool stopCross=crossing(previous,next,light.a,light.b,stop);
+        bool stopCross=light.controlsDirection(next-previous) && crossing(previous,next,light.a,light.b,stop);
         bool exitCross=crossing(previous,next,light.allowedA,light.allowedB,exit);
         if(exitCross && (passedStop || (stopCross && exit>stop+1e-8))) allowed=true;
         passedStop=passedStop || stopCross; previous=next;
@@ -50,7 +50,8 @@ bool Simulation::routePermitsRed(const Entity& e,const TrafficLight& light) cons
     return allowed;
 }
 bool Simulation::lightStops(const TrafficLight& light,const Entity& e) const {
-    return light.phase(seconds_)!=LightPhase::Green && !routePermitsRed(e,light);
+    Vec2 travel{std::cos(e.heading),std::sin(e.heading)};if(e.reversing)travel=travel*-1;
+    return light.phase(seconds_)!=LightPhase::Green && light.controlsDirection(travel) && !routePermitsRed(e,light);
 }
 std::array<double,vehicleKindCount> Simulation::spawnPercentages() const {
     std::array<double,vehicleKindCount> result{}; double total=0;

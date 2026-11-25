@@ -1,0 +1,41 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+      Start 14: sumo_map_demo
+      Start  7: sumo_lanes
+ 1/18 Test  #7: sumo_lanes .......................   Passed   11.67 sec
+      Start  9: sumo_mixed_free
+ 2/18 Test #14: sumo_map_demo ....................   Passed   12.81 sec
+      Start  8: sumo_free_handoff
+ 3/18 Test  #8: sumo_free_handoff ................   Passed    5.59 sec
+      Start 10: sumo_repeated_handoffs
+ 4/18 Test  #9: sumo_mixed_free ..................   Passed    8.22 sec
+      Start 17: simulation_engine_switch
+ 5/18 Test #10: sumo_repeated_handoffs ...........   Passed    3.29 sec
+      Start  6: sumo_directional_signals
+ 6/18 Test #17: simulation_engine_switch .........   Passed    2.49 sec
+      Start 11: sumo_live_signals
+ 7/18 Test  #6: sumo_directional_signals .........   Passed    2.16 sec
+      Start  4: sumo_lane_connections
+ 8/18 Test #11: sumo_live_signals ................   Passed    1.74 sec
+      Start  5: sumo_closed_lane
+ 9/18 Test  #4: sumo_lane_connections ............   Passed    1.19 sec
+      Start 13: sumo_free_permissions
+10/18 Test  #5: sumo_closed_lane .................   Passed    1.05 sec
+      Start 12: sumo_signal_permissions
+11/18 Test #13: sumo_free_permissions ............   Passed    1.21 sec
+      Start 15: sumo_ui_startup
+12/18 Test #12: sumo_signal_permissions ..........   Passed    1.13 sec
+      Start  3: native_directional_signals
+13/18 Test #15: sumo_ui_startup ..................   Passed    1.13 sec
+      Start  2: lane_connections
+14/18 Test  #2: lane_connections .................   Passed    0.13 sec
+      Start 16: native_ui_startup
+15/18 Test #16: native_ui_startup ................   Passed    0.06 sec
+      Start 18: editor_tools_and_manual
+16/18 Test #18: editor_tools_and_manual ..........   Passed    0.10 sec
+      Start  1: junction_priority
+17/18 Test  #3: native_directional_signals .......   Passed    1.90 sec
+18/18 Test  #1: junction_priority ................   Passed   59.25 sec
+
+100% tests passed out of 18
+
+Total Test time (real) =  86.95 sec

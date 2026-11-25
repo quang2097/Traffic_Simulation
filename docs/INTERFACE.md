@@ -1,6 +1,8 @@
+> Current application: `traffic_lab.exe`. Choose Native or SUMO in their separate simulation sections. The searchable manual is built into Help / F1. See [the current UI guide](DUAL_ENGINE_UI.md); older interface descriptions below may refer to earlier layouts.
+
 # Traffic Lab interface
 
-Launch `build/traffic_parallel_departure.exe` for the latest build. It uses a separate filename so the previously opened viewer can keep running.
+Launch `build/traffic_car_following.exe` for the latest build. It uses a separate filename so a previously opened viewer can keep running.
 
 The top workspace strip selects the properties shown beside the central map. Switching workspaces preserves the current simulation and layout.
 
@@ -30,4 +32,22 @@ Saving the PNG or node network writes detector geometry, ordering and thresholds
 
 Lane-spawned vehicles retain their original spawn lane and source node throughout their trip, including lane changes and junction crossings. Select a vehicle to see **Trip origin** in the inspector. Vehicles spawned directly on the PNG without a lane have unknown origins (`-1`).
 
-At a free-junction entrance, vehicles from the same source that are beside each other and aligned on the same current approach use relative motion for the prediction cushion. A shared forward speed no longer makes them wait one at a time. The complete predicted crossing is still checked, and the conservative crossing cushion returns wherever their predicted headings diverge. Actual body clearances, red-light rules, occupied exit buffers, U-turn conflicts and stopped-vehicle protection remain enforced. A shared source does not give priority to a vehicle directly ahead, returning on another approach, or taking an intersecting path.
+At a free-junction entrance, vehicles from the same source that are beside each other and aligned on the same current approach use relative motion for the prediction cushion. A shared forward speed no longer makes them wait one at a time. The complete predicted crossing is still checked. Body collision, red-light rules, occupied exit buffers and U-turn conflicts remain enforced. A shared source does not authorize an intersecting route.
+
+## Radius-zero junctions and timed escape
+
+Set a T-junction or four-way node's **Open junction radius** to **0** to use generated internal lane connectors. Vehicles follow these curves across the intersection and check conflicting crossings and outgoing capacity. They do not use free-space routing or jump between roads. **Guided junction extent (m), 0=auto** changes the connector area; a positive free radius still selects free-space navigation. The automatically generated area accommodates body swing while the actual PNG road mask remains enforced.
+
+The former overlap escape has been removed. **Release stale reservations after timeout** is now optional and off by default. It can clear stale future claims but never disables body collision checks, masks, lane sections or red lights. Legal red queues do not activate it. A genuinely blocked route must wait, find a real alternative, or use the separately configured deletion fallback.
+
+The persistent counters now distinguish **compressed longitudinal gaps**, **emergency braking**, **safety step limits** and **physical collision events**. Compressed gaps are not treated as physical overlap. Events increment on entering a condition rather than every frame. Actual overlap reporting uses body geometry. These counters are distinct from successful arrivals and deletions and reset with traffic.
+
+In **Vehicles**, the old preferred-gap distribution has been replaced by per-class **Standstill gap**, **Time headway**, **Comfortable deceleration**, **Emergency deceleration** and **Lateral planning gap**. Following parameters apply to active vehicles of the class. The standstill gap influences longitudinal speed; it is not a mandatory radius around the body. The following overlay is a forward distance indicator. See [the model explanation and measured comparison](CAR_FOLLOWING.md).
+
+## Restricted lane sections and optional U-turns
+
+In **Map design**, Ctrl-click two connected nodes to select their road. Expand **Lane-change sections**. Type start and end distances in meters from the displayed road's **from-node**, choose forward/reverse/both directions and a lane (0 = all, 1 = first), then choose whether entry and exit are allowed and click **Add lane-change section**. For example, disable both entry and exit from 20-60 m to hold vehicles in their chosen lanes there. Restrictions check the entire merge and body length, including maneuvers that begin outside but finish inside a restricted section. Straight travel and movement within one lane remain possible. Restricted spans are highlighted on the map. Remove and recreate a section to change it. Overlapping prohibitions take precedence over permissions.
+
+For a **two-way road**, expand **Mid-road U-turn opening**, type its start/end distances and click **Insert optional U-turn opening**. This splits the road at the opening midpoint, creates lane-guided U-turn connectors and retains both straight-through directions. The opening must be at least 2 m long and inside the road; larger vehicles need sufficient opening geometry and painted road area. A `U` label marks the node. You can adjust its guided extent or disable its U-turn connections in the node popup. Road edits reset traffic.
+
+Save the **node network** to preserve sections and openings (node format 8). Existing node formats still load. Lane snapshots use format 9 to retain internal-junction identities and section permissions. PNG export alone does not store lane-network design.

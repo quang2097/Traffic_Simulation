@@ -1,49 +1,37 @@
-#include "traffic/Simulation.hpp"
+#include "traffic/SumoBackend.hpp"
+#include "traffic/Demo.hpp"
+#include "traffic/SpawnClock.hpp"
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 
+#ifdef _WIN32
 int main(int argc,char** argv) {
     try {
         using namespace traffic;
-        if(argc==3 && std::string(argv[1])=="--annotated-example") {
-            Map example(120,60,std::vector<Tile>(7200,Tile::Wall),.5);
-            for(int y=8;y<=51;++y) for(int x=4;x<=115;++x) example.tiles[example.index({x,y})]=Tile::Road;
-            example.paintStroke({10.25,9.75},{10.25,9.75},Tile::Spawn,.3);
-            example.paintStroke({10.25,20.75},{10.25,20.75},Tile::Spawn,.3);
-            example.paintStroke({56.25,4.25},{56.25,25.75},Tile::Destination,.3);
-            example.paintStroke({35.25,4.25},{35.25,25.75},Tile::Signal,.3);
-            example.paintStroke({15.25,15.25},{50.25,15.25},Tile::Divider,.3);
-            example.rebuildFeatures(); example.savePng(argv[2]);
-            std::cout<<"Saved annotated example: "<<argv[2]<<'\n'; return 0;
-        }
-        if(argc==4 && std::string(argv[1])=="--convert-legacy") {
-            auto legacy=Map::fromPng(argv[2],.5,MapPalette::Legacy);
-            legacy.savePng(argv[3]);
-            std::cout<<"Saved traffic-palette PNG: "<<argv[3]<<'\n'; return 0;
-        }
-        Map map(70,30,std::vector<Tile>(2100,Tile::Road));
-        map.tiles[map.index({8,15})]=Tile::Spawn;
-        map.tiles[map.index({61,15})]=Tile::Destination;
-        if (argc>1) map=Map::fromPng(argv[1],argc>3?std::stod(argv[3]):.5);
-        int ticks=argc>2 ? std::stoi(argv[2]) : 100;
-        if (ticks<0) throw std::invalid_argument("Ticks must be nonnegative");
-        Simulation simulation(std::move(map),42);
-        int spawned=0;
-        for (int i=0;i<ticks;++i) {
-            if (i%3==0 && simulation.spawnRandom()) ++spawned;
-            simulation.tick();
-        }
-        const auto& grid=simulation.map();
-        for (int y=0;y<grid.height;++y) {
-            for (int x=0;x<grid.width;++x) {
-                auto tile=grid.tiles[grid.index({x,y})];
-                char c=tile==Tile::Wall?'#':tile==Tile::Spawn?'S':tile==Tile::Destination?'D':'.';
-                for (const auto& e:simulation.entities()) if (grid.pixel(e.center)==Cell{x,y}) c='o';
-                std::cout<<c;
+        if(argc!=1 && argc<4)throw std::invalid_argument("Usage: traffic_demo [map.png network.nodes meters-per-pixel [seconds [seed]]]");
+        auto map=argc>1?Map::fromPng(argv[1],std::stod(argv[3])):makeJunctionDemoMap();
+        auto graph=argc>1?NodeGraph::load(argv[2]):makeJunctionDemoGraph();
+        double duration=argc>4?std::stod(argv[4]):120;
+        unsigned seed=argc>5?static_cast<unsigned>(std::stoul(argv[5])):42;
+        Simulation simulation(map,seed);auto compiled=compileRoads(graph);simulation.setLanes(compiled.lanes);
+        simulation.setTrafficFlowSettings({true,true,.25,.1});
+        if(argc>1 && std::filesystem::exists(std::string(argv[2])+".signals"))simulation.loadTrafficLights(std::string(argv[2])+".signals");
+        SumoBackend engine(simulation,graph,seed);
+        std::vector<double> clocks(graph.nodes.size());unsigned offered=0;
+        for(double time=0;time<duration;time+=.1){
+            for(std::size_t n=0;n<graph.nodes.size();++n)if(graph.nodes[n].spawn && consumeSpawnClock(clocks[n],.1,graph.nodes[n].rate)){
+                if(simulation.entities().size()+engine.pending()>=100)continue;
+                for(std::size_t l=0;l<compiled.originNodes.size();++l)if(compiled.originNodes[l]==static_cast<int>(n)){offered+=simulation.spawnRandomOnLane(static_cast<int>(l));break;}
             }
-            std::cout<<'\n';
+            simulation.tick(.1);
         }
-        std::cout<<"Ticks: "<<simulation.ticks()<<" Spawned: "<<spawned
-                 <<" Completed: "<<simulation.completed()<<" Active: "<<simulation.entities().size()<<'\n';
-    } catch (const std::exception& error) { std::cerr<<error.what()<<'\n'; return 1; }
+        std::cout<<engine.status()<<"\nSeconds: "<<simulation.seconds()<<" | admitted requests: "<<offered<<" | completed: "<<simulation.completed()
+                 <<" | active: "<<simulation.entities().size()<<" | pending: "<<engine.pending()<<" | SUMO collision involvements: "<<engine.collisions()
+                 <<" | teleports: "<<engine.teleports()<<" | free handoffs: "<<engine.handoffs()<<"\n";
+    } catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}
 }
+
+#else
+int main(){std::cerr<<"The current SUMO process bridge requires Windows.\n";return 1;}
+#endif

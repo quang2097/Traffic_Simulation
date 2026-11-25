@@ -1,5 +1,6 @@
 #include "traffic/NodeGraph.hpp"
 #include "traffic/Demo.hpp"
+#include "traffic/Geometry.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -10,7 +11,7 @@ void need(bool b,const char* m) { if(!b) throw std::runtime_error(m); }
 void safe(const Simulation& s) {
     for(const auto& e:s.entities()) {
         need(s.map().fits(e.footprint()),"body left mask");
-        for(const auto& o:s.entities()) if(e.id<o.id) need(clearance(e.footprint(),o.footprint())+1e-5>=std::min(e.preferredDistance,o.preferredDistance),"packing violated physical clearance");
+        for(const auto& o:s.entities()) if(e.id<o.id) need(!geometry::violatesClearance(corners(e.footprint()),corners(o.footprint()),0),"packing caused physical body overlap");
     }
 }
 int main() {

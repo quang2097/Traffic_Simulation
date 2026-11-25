@@ -1,0 +1,39 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+      Start 13: sumo_map_demo
+      Start  6: sumo_lanes
+ 1/17 Test  #6: sumo_lanes .......................   Passed   13.37 sec
+      Start  8: sumo_mixed_free
+ 2/17 Test #13: sumo_map_demo ....................   Passed   17.98 sec
+      Start  7: sumo_free_handoff
+ 3/17 Test  #8: sumo_mixed_free ..................   Passed   10.13 sec
+      Start  9: sumo_repeated_handoffs
+ 4/17 Test  #7: sumo_free_handoff ................   Passed    6.52 sec
+      Start 16: simulation_engine_switch
+ 5/17 Test #16: simulation_engine_switch .........   Passed    2.79 sec
+      Start  5: sumo_directional_signals
+ 6/17 Test  #9: sumo_repeated_handoffs ...........   Passed    5.15 sec
+      Start  3: sumo_lane_connections
+ 7/17 Test  #5: sumo_directional_signals .........   Passed    2.59 sec
+      Start 10: sumo_live_signals
+ 8/17 Test  #3: sumo_lane_connections ............   Passed    1.52 sec
+      Start 12: sumo_free_permissions
+ 9/17 Test #10: sumo_live_signals ................   Passed    1.78 sec
+      Start 11: sumo_signal_permissions
+10/17 Test #12: sumo_free_permissions ............   Passed    1.39 sec
+      Start 14: sumo_ui_startup
+11/17 Test #14: sumo_ui_startup ..................   Passed    1.27 sec
+      Start  1: lane_connections
+12/17 Test #11: sumo_signal_permissions ..........   Passed    1.49 sec
+      Start 15: native_ui_startup
+13/17 Test #15: native_ui_startup ................   Passed    0.22 sec
+      Start  2: native_directional_signals
+14/17 Test  #1: lane_connections .................   Passed    0.31 sec
+      Start 17: editor_tools_and_manual
+15/17 Test #17: editor_tools_and_manual ..........   Passed    0.09 sec
+      Start  4: sumo_closed_lane
+16/17 Test  #2: native_directional_signals .......   Passed    0.31 sec
+17/17 Test  #4: sumo_closed_lane .................   Passed    1.65 sec
+
+100% tests passed out of 17
+
+Total Test time (real) =  35.26 sec

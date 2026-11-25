@@ -1,0 +1,270 @@
+Start testing: Nov 20 04:04 SE Asia Standard Time
+----------------------------------------------------------
+1/55 Testing: zero_radius_junction
+1/55 Test: zero_radius_junction
+Command: "D:/whateveraboutit/Traffic_Simulation/build/zero_radius_junction_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"zero_radius_junction" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+3 arms t=30 admitted=15 arrived=0 active=15
+3-way radius-zero junction drained 15 mixed vehicles without overlap or deletion
+4 arms t=30 admitted=20 arrived=1 active=19
+4-way radius-zero junction drained 20 mixed vehicles without overlap or deletion
+Guided junction: blocked trip escaped without deletion, overlaps=1
+Free junction: blocked trip escaped without deletion, overlaps=1
+<end of output>
+Test time =   3.77 sec
+----------------------------------------------------------
+Test Passed.
+"zero_radius_junction" end time: Nov 20 04:04 SE Asia Standard Time
+"zero_radius_junction" time elapsed: 00:00:03
+----------------------------------------------------------
+
+2/55 Testing: gridlock_escape
+2/55 Test: gridlock_escape
+Command: "D:/whateveraboutit/Traffic_Simulation/build/gridlock_escape_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"gridlock_escape" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Lane, internal and free-junction jams drained without deletion; overlap episodes counted; red queues protected
+<end of output>
+Test time =   0.45 sec
+----------------------------------------------------------
+Test Passed.
+"gridlock_escape" end time: Nov 20 04:04 SE Asia Standard Time
+"gridlock_escape" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/55 Testing: road_sections
+3/55 Test: road_sections
+Command: "D:/whateveraboutit/Traffic_Simulation/build/road_section_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"road_sections" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Directional lengthwise lane restrictions, split/save/load and optional mid-road U-turn/straight routes passed
+<end of output>
+Test time =   1.47 sec
+----------------------------------------------------------
+Test Passed.
+"road_sections" end time: Nov 20 04:04 SE Asia Standard Time
+"road_sections" time elapsed: 00:00:01
+----------------------------------------------------------
+
+4/55 Testing: parallel_departure
+4/55 Test: parallel_departure
+Command: "D:/whateveraboutit/Traffic_Simulation/build/parallel_departure_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"parallel_departure" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Parallel same-source admissions=2 within 0.1s, minimum follower speed=4; both arrived; conflicting/unknown origins remain protected
+<end of output>
+Test time =   0.68 sec
+----------------------------------------------------------
+Test Passed.
+"parallel_departure" end time: Nov 20 04:04 SE Asia Standard Time
+"parallel_departure" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/55 Testing: traffic_monitoring
+5/55 Test: traffic_monitoring
+Command: "D:/whateveraboutit/Traffic_Simulation/build/traffic_monitoring_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"traffic_monitoring" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Junction deletion and rolling queue detector monitoring passed
+<end of output>
+Test time =   0.30 sec
+----------------------------------------------------------
+Test Passed.
+"traffic_monitoring" end time: Nov 20 04:04 SE Asia Standard Time
+"traffic_monitoring" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/55 Testing: junction_handoff
+7/55 Test: junction_handoff
+Command: "D:/whateveraboutit/Traffic_Simulation/build/junction_handoff_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"junction_handoff" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Curved/tapered sublane previews match the actual entry pose and all vehicles finish
+<end of output>
+Test time =   1.17 sec
+----------------------------------------------------------
+Test Passed.
+"junction_handoff" end time: Nov 20 04:04 SE Asia Standard Time
+"junction_handoff" time elapsed: 00:00:01
+----------------------------------------------------------
+
+8/55 Testing: lane_edge_recovery
+8/55 Test: lane_edge_recovery
+Command: "D:/whateveraboutit/Traffic_Simulation/build/lane_edge_recovery_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"lane_edge_recovery" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Lane-edge departure escaped without deletion
+<end of output>
+Test time =   0.32 sec
+----------------------------------------------------------
+Test Passed.
+"lane_edge_recovery" end time: Nov 20 04:04 SE Asia Standard Time
+"lane_edge_recovery" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/55 Testing: junction_connections
+10/55 Test: junction_connections
+Command: "D:/whateveraboutit/Traffic_Simulation/build/junction_connection_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"junction_connections" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Mixed T through/turn/merge, four-way, directed U-turn and tapered split passed
+<end of output>
+Test time =   0.69 sec
+----------------------------------------------------------
+Test Passed.
+"junction_connections" end time: Nov 20 04:04 SE Asia Standard Time
+"junction_connections" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/55 Testing: traffic_flow
+16/55 Test: traffic_flow
+Command: "D:/whateveraboutit/Traffic_Simulation/build/traffic_flow_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"traffic_flow" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Continuous packing, permission-only exits, true trip completion and signal migration passed
+<end of output>
+Test time =   1.29 sec
+----------------------------------------------------------
+Test Passed.
+"traffic_flow" end time: Nov 20 04:04 SE Asia Standard Time
+"traffic_flow" time elapsed: 00:00:01
+----------------------------------------------------------
+
+18/55 Testing: turn_lane_decisions
+18/55 Test: turn_lane_decisions
+Command: "D:/whateveraboutit/Traffic_Simulation/build/turn_lane_decision_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"turn_lane_decisions" start time: Nov 20 04:04 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Unmarked corner=8 m/s, marked=2.39999; dense-road speed gain, strategic positioning, keep-right and cooperative yielding passed
+<end of output>
+Test time =   1.93 sec
+----------------------------------------------------------
+Test Passed.
+"turn_lane_decisions" end time: Nov 20 04:05 SE Asia Standard Time
+"turn_lane_decisions" time elapsed: 00:00:01
+----------------------------------------------------------
+
+21/55 Testing: native_hybrid
+21/55 Test: native_hybrid
+Command: "D:/whateveraboutit/Traffic_Simulation/build/native_hybrid_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build/native-hybrid-legacy
+"native_hybrid" start time: Nov 20 04:05 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Lane handoff, blocked-exit admission, persistence, asymmetric taper and safe overtaking passed
+Native open junction seed 7: 24 arrivals
+Native open junction seed 42: 20 arrivals
+Native open junction seed 123: 26 arrivals
+<end of output>
+Test time =  13.22 sec
+----------------------------------------------------------
+Test Passed.
+"native_hybrid" end time: Nov 20 04:05 SE Asia Standard Time
+"native_hybrid" time elapsed: 00:00:13
+----------------------------------------------------------
+
+22/55 Testing: predictive_hybrid
+22/55 Test: predictive_hybrid
+Command: "D:/whateveraboutit/Traffic_Simulation/build/native_hybrid_tests.exe" "predictive"
+Directory: D:/whateveraboutit/Traffic_Simulation/build/native-hybrid-predictive
+"predictive_hybrid" start time: Nov 20 04:05 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Lane handoff, blocked-exit admission, persistence, asymmetric taper and safe overtaking passed
+Native open junction seed 7: 26 arrivals
+Native open junction seed 42: 20 arrivals
+Native open junction seed 123: 28 arrivals
+<end of output>
+Test time =   5.40 sec
+----------------------------------------------------------
+Test Passed.
+"predictive_hybrid" end time: Nov 20 04:05 SE Asia Standard Time
+"predictive_hybrid" time elapsed: 00:00:05
+----------------------------------------------------------
+
+39/55 Testing: signal_approach
+39/55 Test: signal_approach
+Command: "D:/whateveraboutit/Traffic_Simulation/build/signal_approach_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"signal_approach" start time: Nov 20 04:05 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Nearest-route red targeting, phase retargeting, curved approach and queue compaction passed
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"signal_approach" end time: Nov 20 04:05 SE Asia Standard Time
+"signal_approach" time elapsed: 00:00:00
+----------------------------------------------------------
+
+40/55 Testing: permissive_lights
+40/55 Test: permissive_lights
+Command: "D:/whateveraboutit/Traffic_Simulation/build/permissive_light_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"permissive_lights" start time: Nov 20 04:05 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Linked-exit red/yellow permissions, live queues and collision safety passed
+<end of output>
+Test time =   0.25 sec
+----------------------------------------------------------
+Test Passed.
+"permissive_lights" end time: Nov 20 04:05 SE Asia Standard Time
+"permissive_lights" time elapsed: 00:00:00
+----------------------------------------------------------
+
+46/55 Testing: stuck_vehicles
+46/55 Test: stuck_vehicles
+Command: "D:/whateveraboutit/Traffic_Simulation/build/stuck_vehicle_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"stuck_vehicles" start time: Nov 20 04:05 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Stuck leader removal, cooldown and signal protection passed
+<end of output>
+Test time =   0.35 sec
+----------------------------------------------------------
+Test Passed.
+"stuck_vehicles" end time: Nov 20 04:05 SE Asia Standard Time
+"stuck_vehicles" time elapsed: 00:00:00
+----------------------------------------------------------
+
+47/55 Testing: telemetry
+47/55 Test: telemetry
+Command: "D:/whateveraboutit/Traffic_Simulation/build/telemetry_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"telemetry" start time: Nov 20 04:05 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Stopped-time telemetry and parallel collision checks passed
+<end of output>
+Test time =   0.84 sec
+----------------------------------------------------------
+Test Passed.
+"telemetry" end time: Nov 20 04:05 SE Asia Standard Time
+"telemetry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 20 04:05 SE Asia Standard Time

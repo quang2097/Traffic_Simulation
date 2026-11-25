@@ -1,0 +1,29 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+      Start  8: sumo_map_demo
+      Start  1: sumo_lanes
+ 1/12 Test  #1: sumo_lanes .......................   Passed   15.38 sec
+      Start  3: sumo_mixed_free
+ 2/12 Test  #3: sumo_mixed_free ..................   Passed   12.95 sec
+      Start  2: sumo_free_handoff
+ 3/12 Test  #8: sumo_map_demo ....................   Passed   28.59 sec
+      Start  4: sumo_repeated_handoffs
+ 4/12 Test  #4: sumo_repeated_handoffs ...........   Passed    4.63 sec
+      Start 11: simulation_engine_switch
+ 5/12 Test #11: simulation_engine_switch .........   Passed    2.72 sec
+      Start  5: sumo_live_signals
+ 6/12 Test  #2: sumo_free_handoff ................   Passed    8.92 sec
+      Start  6: sumo_signal_permissions
+ 7/12 Test  #5: sumo_live_signals ................   Passed    1.96 sec
+      Start  7: sumo_free_permissions
+ 8/12 Test  #6: sumo_signal_permissions ..........   Passed    1.35 sec
+      Start  9: sumo_ui_startup
+ 9/12 Test  #7: sumo_free_permissions ............   Passed    1.48 sec
+      Start 10: native_ui_startup
+10/12 Test #10: native_ui_startup ................   Passed    0.24 sec
+      Start 12: editor_tools_and_manual
+11/12 Test #12: editor_tools_and_manual ..........   Passed    0.11 sec
+12/12 Test  #9: sumo_ui_startup ..................   Passed    1.36 sec
+
+100% tests passed out of 12
+
+Total Test time (real) =  40.00 sec

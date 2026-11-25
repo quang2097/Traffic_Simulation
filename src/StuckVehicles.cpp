@@ -25,7 +25,8 @@ void Simulation::clearStuckVehicles() {
     // to an approach queue. Remove every expired body; do not count an arrival.
     if(stuckVehicleSettings_.junctionEnabled) {
         entities_.erase(std::remove_if(entities_.begin(),entities_.end(),[&](const Entity& e) {
-            if(!e.inOpenJunction || e.junctionStationarySeconds+1e-9<stuckVehicleSettings_.junctionTimeoutSeconds) return false;
+            if(e.priorityYielding || !e.inOpenJunction || e.junctionStationarySeconds+1e-9<stuckVehicleSettings_.junctionTimeoutSeconds) return false;
+            if(e.escapingGridlock && seconds_-e.escapeStarted<5) return false;
             recordFinishedStopTime(e); lastRemovedStuckVehicle_=e.id;
             ++removedStuckVehicles_; ++removedJunctionVehicles_;
             return true;
@@ -45,7 +46,7 @@ void Simulation::clearStuckVehicles() {
     };
     for(std::size_t i=0;i<count;++i) {
         const auto& e=entities_[i];
-        signalWait[i]=e.turnExitBlocked || (maneuverYieldTo(e) && !e.clearingTurn);
+        signalWait[i]=e.priorityYielding || e.turnExitBlocked || (maneuverYieldTo(e) && !e.clearingTurn);
         Vec2 forward{std::cos(e.heading),std::sin(e.heading)},side{-forward.y,forward.x};
         if(e.signalLight>=0 && e.signalLight<static_cast<int>(lights_.size()))
             signalWait[i]=signalWait[i] || lightStops(lights_[e.signalLight],e);
@@ -56,7 +57,7 @@ void Simulation::clearStuckVehicles() {
         double nearest=std::numeric_limits<double>::infinity();
         for(std::size_t j=0;j<count;++j) if(i!=j) {
             const auto& other=entities_[j]; Vec2 delta=other.center-e.center;
-            double along=dot(delta,forward),gap=std::min(e.preferredDistance,other.preferredDistance);
+            double along=dot(delta,forward),gap=movementGap(e,other);
             if(along<=0 || along>std::max({routing_.lookAhead,e.length*3,5.0}) || along>=nearest) continue;
             if(std::abs(dot(delta,side))>e.width*.5+extent(other,side)+gap+.15) continue;
             if(along-e.length*.5-extent(other,forward)>std::max(2.0,gap+.75)) continue;
@@ -94,7 +95,7 @@ void Simulation::clearStuckVehicles() {
     }
     if(seconds_<removeStuckAfter_) return;
     int selected=-1;
-    for(std::size_t i=0;i<count;++i) if(!entities_[i].inOpenJunction && votes[i]>=2 && entities_[i].stuckSeconds>=stuckVehicleSettings_.timeoutSeconds &&
+    for(std::size_t i=0;i<count;++i) if(!entities_[i].inOpenJunction && !(entities_[i].escapingGridlock && seconds_-entities_[i].escapeStarted<5) && votes[i]>=2 && entities_[i].stuckSeconds>=stuckVehicleSettings_.timeoutSeconds &&
         (selected<0 || votes[i]>votes[selected] || (votes[i]==votes[selected] && entities_[i].id<entities_[selected].id))) selected=static_cast<int>(i);
     if(selected<0) return;
     const auto& victim=entities_[selected];

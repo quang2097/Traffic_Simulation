@@ -1,0 +1,45 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+      Start  3: junction_priority
+      Start 16: sumo_map_demo
+ 1/20 Test #16: sumo_map_demo ....................   Passed   14.79 sec
+      Start  9: sumo_lanes
+ 2/20 Test  #9: sumo_lanes .......................   Passed   13.18 sec
+      Start 11: sumo_mixed_free
+ 3/20 Test #11: sumo_mixed_free ..................   Passed    7.96 sec
+      Start 10: sumo_free_handoff
+ 4/20 Test #10: sumo_free_handoff ................   Passed    5.49 sec
+      Start 12: sumo_repeated_handoffs
+ 5/20 Test #12: sumo_repeated_handoffs ...........   Passed    3.38 sec
+      Start 19: simulation_engine_switch
+ 6/20 Test #19: simulation_engine_switch .........   Passed    2.40 sec
+      Start  8: sumo_directional_signals
+ 7/20 Test  #8: sumo_directional_signals .........   Passed    1.15 sec
+      Start 13: sumo_live_signals
+ 8/20 Test #13: sumo_live_signals ................   Passed    1.49 sec
+      Start  6: sumo_lane_connections
+ 9/20 Test  #6: sumo_lane_connections ............   Passed    1.35 sec
+      Start  7: sumo_closed_lane
+10/20 Test  #7: sumo_closed_lane .................   Passed    1.17 sec
+      Start 15: sumo_free_permissions
+11/20 Test #15: sumo_free_permissions ............   Passed    1.05 sec
+      Start 14: sumo_signal_permissions
+12/20 Test #14: sumo_signal_permissions ..........   Passed    0.98 sec
+      Start 17: sumo_ui_startup
+13/20 Test #17: sumo_ui_startup ..................   Passed    1.09 sec
+      Start  5: native_directional_signals
+14/20 Test  #5: native_directional_signals .......   Passed    1.98 sec
+      Start  4: lane_connections
+15/20 Test  #4: lane_connections .................   Passed    0.13 sec
+      Start 18: native_ui_startup
+16/20 Test #18: native_ui_startup ................   Passed    0.07 sec
+      Start 20: editor_tools_and_manual
+17/20 Test #20: editor_tools_and_manual ..........   Passed    0.18 sec
+      Start  1: native_semantic_lanes
+18/20 Test  #1: native_semantic_lanes ............   Passed    0.48 sec
+      Start  2: sumo_semantic_lanes
+19/20 Test  #2: sumo_semantic_lanes ..............   Passed    1.17 sec
+20/20 Test  #3: junction_priority ................   Passed  154.05 sec
+
+100% tests passed out of 20
+
+Total Test time (real) = 154.07 sec

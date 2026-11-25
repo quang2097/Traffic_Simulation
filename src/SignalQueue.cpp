@@ -52,7 +52,7 @@ bool Simulation::spreadAtSignal(Entity& e) {
         double halfWidth=0;
         for(Vec2 p:corners({other.signalTarget,other.signalStopHeading,other.length,other.width}))
             halfWidth=std::max(halfWidth,std::abs(dot(p-other.signalTarget,tangent)));
-        double offset=halfWidth+e.width*.5+std::min(e.preferredDistance,other.preferredDistance)+.06;
+        double offset=halfWidth+e.width*.5+movementGap(e,other)+.06;
         double center=dot(other.signalTarget-light.a,tangent);
         for(double p:{center-offset,center+offset}) if(p>=margin && p<=lineLength-margin) positions.push_back(p);
     }
@@ -68,7 +68,7 @@ bool Simulation::spreadAtSignal(Entity& e) {
     for(int row=0;row<rows;++row) {
     if(row==1 && planningSignalBatch_ && followRouteToSignal(e,selected,true)) return true;
     for(double lateral:positions) {
-        Vec2 target=light.a+tangent*lateral-forward*(e.length*.5+.15+row*(e.length+std::max(.25,e.preferredDistance)+.3));
+        Vec2 target=light.a+tangent*lateral-forward*(e.length*.5+.15+row*(e.length+std::max(.25,carFollowing_.enabled?e.minGap:e.preferredDistance)+.3));
         double h=stopHeading;
         bool alreadyStopped=row==0 && e.speed<.1 && std::abs(lateral-preferred)<.01 &&
             front(e.footprint(),light.a,forward)>-.35;
@@ -79,7 +79,7 @@ bool Simulation::spreadAtSignal(Entity& e) {
         if(!map_.fits(slot) || front(slot,light.a,forward)>-1e-8) continue;
         bool available=true;
         for(const auto& other:entities_) if(other.id!=e.id) {
-            double gap=std::min(e.preferredDistance,other.preferredDistance)+.04;
+            double gap=movementGap(e,other)+.04;
             bool vacating=planningSignalBatch_ && other.signalLight==selected && dot(other.signalForward,forward)>.5 &&
                 other.next<other.path.size() && length(other.signalTarget-other.center)>.25;
             if(!vacating && geometry::closerThan(corners(slot),corners(other.footprint()),gap)) { available=false; break; }

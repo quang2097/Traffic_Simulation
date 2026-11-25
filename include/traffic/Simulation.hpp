@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <random>
@@ -97,12 +98,22 @@ struct TrafficFlowSettings {
     bool sublanes=false;
     double lateralResolution=.4,lateralGap=.15;
     bool compactAdmission=true;
+    bool swapStarvedPriorities=false;
+    double priorityWaitSeconds=15;
+};
+struct CarFollowingSettings {
+    bool enabled=true; // False is retained only for controlled legacy comparisons.
 };
 struct StuckVehicleSettings {
     bool enabled=true;
     double timeoutSeconds=30;
     bool junctionEnabled=false;
     double junctionTimeoutSeconds=60;
+};
+struct GridlockEscapeSettings {
+    bool enabled=false;
+    // overlapAfterSeconds is retained for source compatibility, never enables overlap.
+    double afterSeconds=15,overlapAfterSeconds=3,speed=1.5;
 };
 struct TrafficRecoverySettings {
     bool enabled=true;
@@ -123,7 +134,7 @@ struct TurnNegotiationSettings {
     bool enabled=false;
     double creepSpeed=2,lookAhead=12,noProgressTimeout=2;
 };
-enum class StopReason { Moving, Starting, Arrived, Signal, Vehicle, Road, Yielding, Unexplained, Deadlock, ManeuverYield, BlockedExit };
+enum class StopReason { Moving, Starting, Arrived, Signal, Vehicle, Road, Yielding, Unexplained, Deadlock, ManeuverYield, BlockedExit, PriorityYield };
 const char* stopReasonName(StopReason reason);
 std::vector<Cell> route(const Map&,Cell start,Cell goal,std::mt19937&,double variation=2);
 enum class VehicleKind { Bike,Motorbike,Car,Truck,Bus,Count };
@@ -136,11 +147,17 @@ struct MotionDistribution {
     double accelerationMean=2,accelerationStdDev=0.4;
 };
 struct VehicleProfile {
+    // distance is a deprecated legacy-comparison field; native following uses minGap/tau.
     Gaussian length,width,distance;
     MotionDistribution motion;
     double weight=1;
+    double minGap=.7,tau=1,deceleration=4.5,emergencyDeceleration=9,lateralMinGap=.1;
 };
 struct TurnControl { Vec2 point; double radius=12,braking=3; };
+struct LaneChangeSection {
+    double begin=0,end=0; // Meters along this directed lane.
+    bool allowEnter=false,allowExit=false;
+};
 struct DirectedLane {
     std::vector<Vec2> points;
     double width=3.5,speedLimit=8;
@@ -152,6 +169,7 @@ struct DirectedLane {
     double turnSmoothing=1;
     bool inferConnections=true;
     int roadGroup=-1,travelDirection=0,openJunction=-1;
+    int roadLane=0; // Left-to-right index within this travel direction.
     Vec2 junctionCenter;
     double junctionRadius=0;
     std::vector<double> pointWidths;
@@ -160,6 +178,10 @@ struct DirectedLane {
     std::vector<TurnControl> turnControls;
     int sourceNode=-1,destinationNode=-1;
     bool excludeOwnDestination=false;
+    int internalJunction=-1; // Fixed SUMO-style internal connector, not free space.
+    std::vector<LaneChangeSection> changeSections;
+    int movementPriority=1;
+    bool semanticTransfer=false;
 };
 std::array<VehicleProfile,vehicleKindCount> defaultProfiles();
 std::array<VehicleProfile,vehicleKindCount> vietnameseCityProfiles();
@@ -177,6 +199,15 @@ struct MotionPath {
 // replans use a tangent-continuous Bezier connector from the current pose.
 MotionPath curvePath(const Map& map,const Footprint& pose,const std::vector<Vec2>& waypoints,double initialConnectorLimit=0,const std::vector<double>& smoothing={});
 struct Entity {
+    double minGap=.7,tau=1,deceleration=4.5,emergencyDeceleration=9,lateralMinGap=.1;
+    bool gapCompressed=false,wasGapCompressed=false,emergencyBraking=false,wasEmergencyBraking=false,contactLimited=false,wasContactLimited=false;
+    bool approachBlocked=false;
+    double approachCheckAfter=0;
+    int internalJunction=-1;
+    bool escapingGridlock=false,escapeOverlap=false;
+    double escapeStarted=0;
+    Vec2 escapeAnchor;
+    bool onJunction() const { return inOpenJunction || internalJunction>=0; }
     int spawnLane=-1,spawnNode=-1; // Immutable trip origin; current lane may change.
     double sublaneAfter=0,lateralOffset=0;
     std::string sublaneStatus="centered";
@@ -187,6 +218,7 @@ struct Entity {
     std::vector<int> networkRoute;
     std::size_t networkStage=0;
     bool inOpenJunction=false,waitingForJunction=false,planningExitGate=false;
+    bool junctionEntryCleared=false; // A continuous handoff prefix has cleared the entry row.
     int activeJunction=-1;
     Vec2 junctionCenter,exitDirection;
     double junctionRadius=0,laneChangeAfter=0,junctionEnteredAt=0,junctionRetryAfter=0;
@@ -216,6 +248,8 @@ struct Entity {
     bool clearingTurn=false;
     std::string junctionStatus;
     bool turnExitBlocked=false;
+    bool priorityYielding=false;
+    double priorityYieldSince=-1;
     std::size_t blockedTurnEntry=0;
     double stoppedSeconds=0,currentStopSeconds=0,longestStopSeconds=0,ageSeconds=0;
     double junctionStationarySeconds=0;
@@ -282,7 +316,7 @@ struct TrafficLightQueueStatus {
     std::vector<QueueDetectorStatus> lines;
 };
 struct TrafficLight {
-    Vec2 a,b; // Finite stop line in meters; controls crossings from both sides.
+    Vec2 a,b; // Finite oriented stop line in meters. Only outDirection is controlled.
     double greenSeconds=10,yellowSeconds=2,redSeconds=12,offsetSeconds=0;
     bool enabled=true;
     bool permissive=false;
@@ -290,9 +324,17 @@ struct TrafficLight {
     std::uint64_t id=0;
     double queueWindowSeconds=30,queueThresholdPercent=50;
     std::vector<QueueDetector> queueDetectors; // Order: nearest to farthest upstream.
+    Vec2 outDirection; // Controlled travel direction; the reverse direction is always permitted by this light.
+    int anchorNode=-1; // Optional road-station node. Permission gates remain separate from destinations.
+    Vec2 controlledDirection() const;
+    bool controlsDirection(Vec2 travel) const;
+    bool controlsMovement(Vec2 from,Vec2 to) const;
     LightPhase phase(double simulationSeconds) const;
 };
 class Simulation {
+    friend struct JunctionPriorityTestAccess;
+    friend class SumoBackend;
+    class SumoBackend* sumoBackend_=nullptr; // Non-owning; attached by the application.
 public:
     explicit Simulation(Map map,std::uint32_t seed=1);
     bool spawn(Cell start,Cell goal,double variation=2,VehicleKind kind=VehicleKind::Car);
@@ -383,6 +425,25 @@ public:
     std::size_t openJunctionVehicles() const;
     TrafficLightQueueStatus trafficLightQueueStatus(std::uint64_t lightId) const;
     std::uint64_t lastRemovedStuckVehicle() const { return lastRemovedStuckVehicle_; }
+    void setGridlockEscapeSettings(GridlockEscapeSettings settings);
+    const GridlockEscapeSettings& gridlockEscapeSettings() const { return gridlockEscape_; }
+    std::uint64_t gridlockEscapes() const { return gridlockEscapes_; }
+    std::uint64_t laneGridlockEscapes() const { return laneGridlockEscapes_; }
+    std::uint64_t internalGridlockEscapes() const { return internalGridlockEscapes_; }
+    std::uint64_t freeGridlockEscapes() const { return freeGridlockEscapes_; }
+    std::uint64_t overlapEscapes() const { return overlapEscapes_; }
+    std::uint64_t escapeOverlapPairs() const { return escapeOverlapPairs_; }
+    void setCarFollowingSettings(CarFollowingSettings settings) { carFollowing_=settings; }
+    const CarFollowingSettings& carFollowingSettings() const { return carFollowing_; }
+    double movementGap(const Entity& a,const Entity& b) const { return carFollowing_.enabled?0:std::min(a.preferredDistance,b.preferredDistance); }
+    double routeBuffer(const Entity& a) const { return carFollowing_.enabled?0:a.preferredDistance; }
+    std::uint64_t compressedGapEvents() const { return compressedGapEvents_; }
+    std::uint64_t emergencyBrakeEvents() const { return emergencyBrakeEvents_; }
+    std::uint64_t contactLimitEvents() const { return contactLimitEvents_; }
+    std::uint64_t physicalCollisionEvents() const { return physicalCollisionEvents_; }
+    static double brakingDistance(double speed,double deceleration,double step);
+    static double safeFollowingSpeed(double netGap,double leaderSpeed,double leaderDeceleration,double deceleration,double tau,double step);
+    bool laneChangeAllowed(int from,int to,Vec2 start,Vec2 end,double bodyLength=0) const;
     std::uint64_t destinationRefreshes() const { return destinationRefreshes_; }
     std::uint64_t destinationRefreshAttempts() const { return destinationRefreshAttempts_; }
 private:
@@ -392,6 +453,19 @@ private:
     void advance(double seconds);
     void clearStuckVehicles();
     void updateTrafficMonitoring(double seconds);
+    void updateGridlockEscapes();
+    void recordEscapeOverlaps();
+    void prepareDrivingSnapshot(double dt);
+    void prepareApproachSpeeds();
+    double carFollowingSpeed(Entity& entity) const;
+    double clearMovementFraction(const Footprint& from,const Footprint& to,const Entity& entity,bool reservations) const;
+    void recordDrivingStatistics();
+    struct DrivingObservation { std::uint64_t id; Footprint body; double speed,deceleration; bool signal,maneuver; int lane=-1,exit=-1,junction=-1; };
+    std::vector<DrivingObservation> drivingSnapshot_;
+    double drivingStep_=.01;
+    CarFollowingSettings carFollowing_;
+    std::uint64_t compressedGapEvents_=0,emergencyBrakeEvents_=0,contactLimitEvents_=0,physicalCollisionEvents_=0;
+    std::vector<std::pair<std::uint64_t,std::uint64_t>> previousPhysicalCollisions_;
     void reconcileQueueDetectors();
     struct DetectorSample { double seconds; bool occupied; };
     struct DetectorHistory {
@@ -419,6 +493,9 @@ private:
     bool junctionAdmission(const Entity& entity,int link,const std::vector<Vec2>& movement) const;
     bool reserveManeuver(Entity& entity,const PathManeuver& maneuver);
     bool beginRecovery(Entity& entity,bool shortYield=false);
+    void preparePriorityYields();
+    std::uint64_t priorityGrant_=0;
+    double priorityCheckAfter_=0;
     bool blockedByLight(const Footprint& from,const Footprint& to,const Entity& entity) const;
     Footprint stopProbe(const Entity& entity) const;
     bool lightStops(const TrafficLight& light,const Entity& entity) const;
@@ -485,6 +562,9 @@ private:
     double completedStopTotal_=0,completedStopMin_=0,completedStopMax_=0;
     std::uint64_t completedThatStopped_=0;
     StuckVehicleSettings stuckVehicleSettings_;
+    GridlockEscapeSettings gridlockEscape_;
+    std::uint64_t gridlockEscapes_=0,laneGridlockEscapes_=0,internalGridlockEscapes_=0,freeGridlockEscapes_=0,overlapEscapes_=0,escapeOverlapPairs_=0;
+    std::vector<std::pair<std::uint64_t,std::uint64_t>> previousEscapeOverlaps_;
     std::uint64_t removedStuckVehicles_=0,lastRemovedStuckVehicle_=0;
     std::uint64_t removedJunctionVehicles_=0;
     double nextStuckCheck_=0,removeStuckAfter_=0;

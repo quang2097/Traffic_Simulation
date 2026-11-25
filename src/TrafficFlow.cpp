@@ -42,6 +42,7 @@ bool conflict(const Footprint& a,const Footprint& b,double gap) {
 }
 }
 void Simulation::setTrafficFlowSettings(TrafficFlowSettings settings) {
+    if(!std::isfinite(settings.priorityWaitSeconds) || settings.priorityWaitSeconds<1 || settings.priorityWaitSeconds>3600)throw std::invalid_argument("Invalid priority yield timeout");
     if(!std::isfinite(settings.lateralResolution) || settings.lateralResolution<.1 || settings.lateralResolution>2 || !std::isfinite(settings.lateralGap) || settings.lateralGap<0 || settings.lateralGap>2) throw std::invalid_argument("Invalid sublane settings");
     flow_=settings;
     if(flow_.predictiveJunctions) {
@@ -51,17 +52,17 @@ void Simulation::setTrafficFlowSettings(TrafficFlowSettings settings) {
 }
 void Simulation::saveTrafficLights(const std::string& file) const {
     std::ofstream out(file); if(!out) throw std::runtime_error("Cannot save signal links");
-    out<<std::setprecision(17)<<"TRAFFIC_SIGNALS 3 "<<lights_.size()<<'\n';
+    out<<std::setprecision(17)<<"TRAFFIC_SIGNALS 4 "<<lights_.size()<<'\n';
     for(const auto& l:lights_) {
         out<<l.id<<' '<<l.a.x<<' '<<l.a.y<<' '<<l.b.x<<' '<<l.b.y<<' '<<l.greenSeconds<<' '<<l.yellowSeconds<<' '<<l.redSeconds<<' '<<l.offsetSeconds<<' '<<l.enabled<<' '<<l.permissive<<' '<<l.allowedA.x<<' '<<l.allowedA.y<<' '<<l.allowedB.x<<' '<<l.allowedB.y<<' '
-           <<l.queueWindowSeconds<<' '<<l.queueThresholdPercent<<' '<<l.queueDetectors.size()<<'\n';
+           <<l.queueWindowSeconds<<' '<<l.queueThresholdPercent<<' '<<l.queueDetectors.size()<<' '<<l.controlledDirection().x<<' '<<l.controlledDirection().y<<' '<<l.anchorNode<<'\n';
         for(const auto& line:l.queueDetectors) out<<line.id<<' '<<line.a.x<<' '<<line.a.y<<' '<<line.b.x<<' '<<line.b.y<<'\n';
     }
     if(!out) throw std::runtime_error("Cannot write signal links");
 }
 void Simulation::loadTrafficLights(const std::string& file) {
     std::ifstream in(file); std::string magic; int version; std::size_t count;
-    if(!(in>>magic>>version>>count) || magic!="TRAFFIC_SIGNALS" || version<1 || version>3 || count>10000) throw std::runtime_error("Invalid signal links file");
+    if(!(in>>magic>>version>>count) || magic!="TRAFFIC_SIGNALS" || version<1 || version>4 || count>10000) throw std::runtime_error("Invalid signal links file");
     std::vector<TrafficLight> next(count);
     std::size_t totalDetectors=0;
     for(auto& l:next) {
@@ -74,6 +75,7 @@ void Simulation::loadTrafficLights(const std::string& file) {
             std::size_t detectors;
             if(!(in>>l.queueWindowSeconds>>l.queueThresholdPercent>>detectors) || detectors>10000 || (totalDetectors+=detectors)>100000)
                 throw std::runtime_error("Invalid queue detector configuration");
+            if(version>=4 && !(in>>l.outDirection.x>>l.outDirection.y>>l.anchorNode))throw std::runtime_error("Invalid directional signal");
             l.queueDetectors.resize(detectors);
             for(auto& line:l.queueDetectors)
                 if(!(in>>line.id>>line.a.x>>line.a.y>>line.b.x>>line.b.y)) throw std::runtime_error("Incomplete queue detector line");
@@ -86,8 +88,8 @@ bool Simulation::parallelDeparture(const Entity& a,const Entity& b) const {
     bool sameOrigin=(a.spawnLane>=0 && a.spawnLane==b.spawnLane) || (a.spawnNode>=0 && a.spawnNode==b.spawnNode);
     if(!sameOrigin || a.reversing || b.reversing || b.waitingForLight || b.desiredSpeed<=stoppedSpeedThreshold) return false;
     auto approach=[&](const Entity& actor) {
-        if(actor.networkStage>=actor.networkRoute.size() || (actor.inOpenJunction && actor.networkStage==0)) return -1;
-        return actor.networkRoute[actor.networkStage-(actor.inOpenJunction?1:0)];
+        if(actor.networkStage>=actor.networkRoute.size() || (actor.onJunction() && actor.networkStage==0)) return -1;
+        return actor.networkRoute[actor.networkStage-(actor.onJunction()?1:0)];
     };
     int left=approach(a),right=approach(b);
     if(left<0 || right<0 || left>=static_cast<int>(lanes_.size()) || right>=static_cast<int>(lanes_.size())) return false;
@@ -96,7 +98,7 @@ bool Simulation::parallelDeparture(const Entity& a,const Entity& b) const {
     Vec2 forward{std::cos(a.heading),std::sin(a.heading)},side{-forward.y,forward.x};
     if(dot(forward,{std::cos(b.heading),std::sin(b.heading)})<.98) return false;
     auto offset=b.center-a.center;
-    double lateral=std::abs(dot(offset,side)),gap=std::min(a.preferredDistance,b.preferredDistance);
+    double lateral=std::abs(dot(offset,side)),gap=movementGap(a,b);
     // Only companions beside each other, never a leader directly ahead or a
     // vehicle from the same source returning on a different approach.
     return std::abs(dot(offset,forward))<std::max(4.,a.length+b.length) &&
@@ -120,12 +122,41 @@ bool Simulation::predictiveAdmission(const Entity& e,int linkId,const std::vecto
     if(exit>=0) {
         const auto& lane=lanes_[exit]; Vec2 forward=unit(lane.points[1]-lane.points[0]);
         Footprint buffer{lane.points[0]+forward*(e.length+1),std::atan2(forward.y,forward.x),e.length*2+2,e.width};
-        for(const auto& other:entities_) if(other.id!=e.id && !other.inOpenJunction && conflict(buffer,other.footprint(),std::min(e.preferredDistance,other.preferredDistance))) return false;
+        for(const auto& other:entities_) if(other.id!=e.id && !other.onJunction() && conflict(buffer,other.footprint(),movementGap(e,other))) return false;
     }
     double cap=std::min(e.desiredSpeed,lanes_[linkId].speedLimit);
     double horizon=std::min(60.,own.s.back()/std::max(1.,cap)+cap/e.acceleration+2);
     const double interval=flow_.compactAdmission?.1:.25;
-    for(const auto& other:entities_) if(other.id!=e.id && other.inOpenJunction && other.activeJunction==lanes_[linkId].openJunction) {
+    int junction=lanes_[linkId].openJunction>=0?lanes_[linkId].openJunction:lanes_[linkId].internalJunction;
+    for(const auto& other:entities_) if(other.id!=e.id && other.onJunction() && (other.activeJunction==junction || lanes_[linkId].semanticTransfer || (other.networkStage<other.networkRoute.size() && lanes_[other.networkRoute[other.networkStage]].semanticTransfer))) {
+        if(carFollowing_.enabled && lanes_[linkId].internalJunction>=0) {
+            Vec2 forward{std::cos(e.heading),std::sin(e.heading)},offset=other.center-e.center;
+            bool sameConnection=other.networkStage>0 && other.networkRoute[other.networkStage]==linkId &&
+                other.networkRoute[other.networkStage-1]==e.networkRoute[e.networkStage];
+            bool followingStream=sameConnection && dot(offset,forward)>(e.length+other.length)*.5+e.minGap;
+            if(!followingStream) {
+                // Connection conflicts are resolved before entry. Collinear
+                // followers use car-following; separate lateral stripes may
+                // proceed together when their actual swept corridors clear.
+                struct Piece {geometry::Polygon polygon;double pad,x0=1e100,y0=1e100,x1=-1e100,y1=-1e100;};
+                auto pieces=[](const Track& track,const Entity& actor) {
+                    std::vector<Piece> result;auto from=actor.footprint();
+                    for(double d=0;d<track.s.back();d+=1.) {
+                        auto to=track.at(actor,std::min(track.s.back(),d+1.));Piece piece;piece.polygon=geometry::swept(from,to,piece.pad);
+                        for(auto p:piece.polygon){piece.x0=std::min(piece.x0,p.x);piece.y0=std::min(piece.y0,p.y);piece.x1=std::max(piece.x1,p.x);piece.y1=std::max(piece.y1,p.y);}
+                        result.push_back(std::move(piece));from=to;
+                    }
+                    return result;
+                };
+                auto ours=pieces(own,e),theirs=pieces(Track(other),other);
+                for(const auto& a:ours)for(const auto& b:theirs) {
+                    double pad=a.pad+b.pad+.02;
+                    if(a.x1+pad<b.x0 || b.x1+pad<a.x0 || a.y1+pad<b.y0 || b.y1+pad<a.y0)continue;
+                    if(geometry::violatesClearance(a.polygon,b.polygon,pad))return false;
+                }
+                continue;
+            }
+        }
         // A U-turn occupies the approach's opposing swept corridor. Reserve
         // its remaining corridor while disjoint streams continue.
         // ETA-only forecasts cannot safely arbitrate this opposing maneuver.
@@ -139,7 +170,7 @@ bool Simulation::predictiveAdmission(const Entity& e,int linkId,const std::vecto
         if(reverses(e.networkRoute[e.networkStage],exit) ||
            (other.networkStage>0 && reverses(other.networkRoute[other.networkStage-1],otherExit))) {
             Track occupied(other);
-            double gap=std::min(e.preferredDistance,other.preferredDistance)+1.05;
+            double gap=movementGap(e,other)+1.05;
             for(double a=0;a<=own.s.back()+1;a+=1) for(double b=0;b<=occupied.s.back()+1;b+=1)
                 if(conflict(own.at(e,a),occupied.at(other,b),gap)) return false;
             continue;
@@ -154,18 +185,23 @@ bool Simulation::predictiveAdmission(const Entity& e,int linkId,const std::vecto
                 auto previous=e.footprint();
                 for(std::size_t i=1;i<own.p.size();++i) {
                     Footprint pose{own.p[i],own.h[i],e.length,e.width};
-                    if(!geometry::motionClearance(previous,pose,other.footprint(),std::min(e.preferredDistance,other.preferredDistance)))return false;
+                    if(!geometry::motionClearance(previous,pose,other.footprint(),movementGap(e,other)))return false;
                     previous=pose;
                 }
                 continue;
             }
         }
         Track track(other); double otherCap=std::min(other.desiredSpeed,lanes_[other.networkRoute[other.networkStage]].speedLimit);
+        if(carFollowing_.enabled) {Entity forecast=other;otherCap=std::min(otherCap,carFollowingSpeed(forecast));}
         bool companion=parallelDeparture(e,other);
-        double gap=std::min(e.preferredDistance,other.preferredDistance)+.2;
+        double gap=movementGap(e,other)+.2;
         for(double t=0;t<horizon;t+=interval) {
             auto a=own.at(e,travel(e.speed,e.acceleration,cap,t));
             double distance=travel(other.speed,other.acceleration,otherCap,t);
+            if(carFollowing_.enabled && other.speed>otherCap) {
+                double slowing=std::min(t,(other.speed-otherCap)/other.deceleration);
+                distance=other.speed*slowing-.5*other.deceleration*slowing*slowing+otherCap*(t-slowing);
+            }
             auto b=track.at(other,distance);
             // The outgoing road takes over after the cached merge point.
             if(distance>track.s.back()) {
@@ -183,7 +219,7 @@ bool Simulation::predictiveAdmission(const Entity& e,int linkId,const std::vecto
                 // while aligned; crossing/merging paths still have to clear.
                 auto velocity=ownForward*std::min(cap,e.speed+e.acceleration*t)-otherForward*std::min(otherCap,other.speed+other.acceleration*t);
                 temporalMargin=interval*.5*length(velocity);
-                forecastGap=std::min(e.preferredDistance,other.preferredDistance)+.02;
+                forecastGap=movementGap(e,other)+.02;
             }
             if(conflict(a,b,forecastGap+temporalMargin)) return false;
         }
@@ -212,8 +248,9 @@ bool Simulation::advancePredictiveVehicle(Entity& e,double dt) {
     double bendCap=cap;
     // Braking-aware path following. Projection onto the committed trajectory
     // recognizes leaders around bends instead of testing only today's heading.
-    for(const auto& other:entities_) if(other.id!=e.id && length(other.center-e.center)<std::max(20.,e.speed*3+e.length+other.length)) {
-        double gap=std::min(e.preferredDistance,other.preferredDistance);
+    if(carFollowing_.enabled) cap=std::min(cap,carFollowingSpeed(e));
+    for(const auto& other:entities_) if(!carFollowing_.enabled && !e.escapingGridlock && other.id!=e.id && length(other.center-e.center)<std::max(20.,e.speed*3+e.length+other.length)) {
+        double gap=movementGap(e,other);
         for(double d=.25;d<std::min(own.s.back(),stopping);d+=.5) {
             auto pose=own.at(e,d);
             // An additional lateral cushion makes legally packed neighbors
@@ -233,9 +270,14 @@ bool Simulation::advancePredictiveVehicle(Entity& e,double dt) {
             break;
         }
     }
+    if(e.escapingGridlock) cap=std::min(cap,gridlockEscape_.speed);
     double braking=cap<bendCap-1e-8?2*e.acceleration:bendBraking;
+    double previousSpeed=e.speed;
     double newSpeed=e.speed<cap?std::min(cap,e.speed+e.acceleration*dt):std::max(cap,e.speed-braking*dt);
-    double distance=(e.speed+newSpeed)*.5*dt;
+    if(carFollowing_.enabled) newSpeed=std::max(std::min(cap,e.speed+e.acceleration*dt),std::max(0.,e.speed-e.emergencyDeceleration*dt));
+    e.emergencyBraking=carFollowing_.enabled && previousSpeed-newSpeed>e.deceleration*dt+1e-6;
+    double distance=carFollowing_.enabled?newSpeed*dt:(e.speed+newSpeed)*.5*dt;
+    double movedThisTick=0;
     bool clear=true;
     while(distance>1e-12 && e.next<e.path.size()) {
         double segment=length(e.path[e.next]-e.path[e.next-1]);
@@ -245,12 +287,18 @@ bool Simulation::advancePredictiveVehicle(Entity& e,double dt) {
         to.center=e.path[e.next-1]+(e.path[e.next]-e.path[e.next-1])*t;
         to.heading=e.pathHeadings[e.next-1]+angleDelta(e.pathHeadings[e.next-1],e.pathHeadings[e.next])*t;
         e.waitingForLight=blockedByLight(from,to,e);
-        if(length(to.center-from.center)>move+1e-7 || e.waitingForLight || !feasible(from,to,e,true,false)) { clear=false; break; }
+        if(length(to.center-from.center)>move+1e-7) {clear=false;break;}
+        double fraction=carFollowing_.enabled?clearMovementFraction(from,to,e,false):(!e.waitingForLight && feasible(from,to,e,true,false)?1:0);
+        if(fraction<1) {e.contactLimited=!e.waitingForLight;to.center=from.center+(to.center-from.center)*fraction;to.heading=from.heading+angleDelta(from.heading,to.heading)*fraction;move*=fraction;clear=false;}
         e.center=to.center; e.heading=to.heading; e.segmentProgress+=move; distance-=move;
+        movedThisTick+=move;
         if(e.signalLight!=-1) e.signalRemaining=std::max(0.,e.signalRemaining-move);
         if(e.segmentProgress>=segment-1e-9) { ++e.next; e.segmentProgress=0; }
+        if(!clear)break;
     }
-    e.speed=clear?newSpeed:0; e.blockedSeconds=clear?0:e.blockedSeconds+dt;
+    e.speed=clear?newSpeed:carFollowing_.enabled?std::min(newSpeed,movedThisTick/dt):0;
+    if(carFollowing_.enabled && previousSpeed-e.speed>e.deceleration*dt+1e-6)e.emergencyBraking=true;
+    e.blockedSeconds=clear?0:e.blockedSeconds+dt;
     return true;
 }
 
@@ -259,10 +307,10 @@ void Simulation::updateSublanes() {
     for(auto& e:entities_) {
         if(e.reservesSublaneGap()) continue;
         e.sublaneReservation.clear();
-        if(e.networkRoute.empty() || e.inOpenJunction || e.changingLanes || e.signalLight!=-1 || e.reversing || seconds_<e.sublaneAfter) continue;
+        if(e.escapingGridlock || e.networkRoute.empty() || e.onJunction() || e.changingLanes || e.signalLight!=-1 || e.reversing || seconds_<e.sublaneAfter) continue;
         e.sublaneAfter=seconds_+.5;
         int laneId=e.networkRoute[e.networkStage]; const auto& lane=lanes_[laneId];
-        bool junctionExit=e.networkStage+1<e.networkRoute.size() && lanes_[e.networkRoute[e.networkStage+1]].openJunction>=0;
+        bool junctionExit=e.networkStage+1<e.networkRoute.size() && (lanes_[e.networkRoute[e.networkStage+1]].openJunction>=0 || lanes_[e.networkRoute[e.networkStage+1]].internalJunction>=0);
         if(lane.roadGroup<0 || e.next>=e.path.size()) continue;
         Vec2 forward{std::cos(e.heading),std::sin(e.heading)},side{-forward.y,forward.x};
         double width=laneWidthAt(laneId,e.center),bestSpeed=followingSpeed(e),bestOffset=0;
@@ -283,7 +331,7 @@ void Simulation::updateSublanes() {
         // blocked gap. The full swept connector and tapered corridor must fit.
         double mergeDistance=junctionExit?std::max(4.,e.speed*1.5+std::abs(bestOffset)*3.):std::max({e.length*2.,e.speed*.6,std::abs(bestOffset)*3.});
         Track track(e); if(track.s.back()<mergeDistance+e.length*2) continue;
-        bool freeExit=e.networkStage+1==e.networkRoute.size() || lanes_[e.networkRoute[e.networkStage+1]].openJunction>=0;
+        bool freeExit=e.networkStage+1==e.networkRoute.size() || lanes_[e.networkRoute[e.networkStage+1]].openJunction>=0 || lanes_[e.networkRoute[e.networkStage+1]].internalJunction>=0;
         std::vector<Vec2> guide{e.center};
         for(double d=.4;d<track.s.back();d+=.4) {
             auto pose=track.at(e,d); Vec2 lateral{-std::sin(pose.heading),std::cos(pose.heading)};
@@ -316,7 +364,7 @@ void Simulation::updateSublanes() {
         }
         if(clear) {
             for(const auto& other:entities_) if(other.id!=e.id) {
-                double gap=std::max(std::min(e.preferredDistance,other.preferredDistance),flow_.lateralGap)+.02;
+                double gap=(carFollowing_.enabled?std::max({e.lateralMinGap,other.lateralMinGap,flow_.lateralGap}):std::max(movementGap(e,other),flow_.lateralGap))+.02;
                 for(const auto& piece:candidate.sublaneReservation) {
                     if(geometry::violatesClearance(piece.sweep,corners(other.footprint()),gap+piece.padding)) clear=false;
                     if(other.reservesSublaneGap()) for(const auto& occupied:other.sublaneReservation) if(occupied.end>=other.next &&

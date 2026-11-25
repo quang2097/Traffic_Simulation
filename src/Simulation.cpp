@@ -1,5 +1,6 @@
 #include "traffic/Simulation.hpp"
 #include "traffic/Parallel.hpp"
+#include "traffic/SumoBackend.hpp"
 #include "traffic/Geometry.hpp"
 #include <algorithm>
 #include <chrono>
@@ -102,11 +103,15 @@ const char* vehicleName(VehicleKind kind) {
     int i=static_cast<int>(kind); return i>=0 && i<vehicleKindCount?names[i]:"Unknown";
 }
 std::array<VehicleProfile,vehicleKindCount> defaultProfiles() {
-    return {{ {{1.8,.12},{.6,.05},{.4,.1},{5,1,1,.2},2},
+    std::array<VehicleProfile,vehicleKindCount> profiles{{ {{1.8,.12},{.6,.05},{.4,.1},{5,1,1,.2},2},
               {{2.1,.15},{.75,.07},{.5,.15},{9,2,2.5,.5},3},
               {{4.5,.4},{1.8,.12},{1.5,.3},{11,2,2,.4},4},
               {{8,1},{2.5,.12},{2,.4},{8,1.5,1,.2},1},
               {{12,.8},{2.5,.1},{2,.4},{7,1,1,.2},1} }};
+    profiles[0].minGap=.25;profiles[0].tau=.65;profiles[0].deceleration=2;profiles[0].emergencyDeceleration=5;
+    profiles[1].minGap=.3;profiles[1].tau=.8;
+    for(int i:{3,4}) {profiles[i].minGap=1;profiles[i].tau=1.2;profiles[i].deceleration=3;profiles[i].emergencyDeceleration=7;}
+    return profiles;
 }
 LightPhase TrafficLight::phase(double seconds) const {
     if(!enabled) return LightPhase::Green;
@@ -130,7 +135,10 @@ void Simulation::setProfile(VehicleKind kind,const VehicleProfile& p) {
     profile(kind);
     validateGaussian(p.length,.2,30); validateGaussian(p.width,.15,5);
     validateGaussian(p.distance,0,20); validateMotion(p.motion); validate(p.weight,0,100,"Invalid vehicle weight");
+    validate(p.minGap,0,20,"Invalid standstill gap");validate(p.tau,.05,10,"Invalid time headway");
+    validate(p.deceleration,.1,50,"Invalid comfortable deceleration");validate(p.emergencyDeceleration,p.deceleration,50,"Invalid emergency deceleration");validate(p.lateralMinGap,0,3,"Invalid lateral planning gap");
     profiles_[static_cast<int>(kind)]=p;
+    for(auto& e:entities_) if(e.kind==kind) {e.minGap=p.minGap;e.tau=p.tau;e.deceleration=p.deceleration;e.emergencyDeceleration=p.emergencyDeceleration;e.lateralMinGap=p.lateralMinGap;}
 }
 void Simulation::setMotionDistribution(MotionDistribution d) {
     validateMotion(d); for(auto& p:profiles_) p.motion=d;
@@ -140,6 +148,7 @@ double Simulation::sample(Gaussian g,double low,double high) {
     return std::clamp(value,low,high);
 }
 void Simulation::sampleMotion(Entity& e) {
+    const auto& p=profile(e.kind);e.minGap=p.minGap;e.tau=p.tau;e.deceleration=p.deceleration;e.emergencyDeceleration=p.emergencyDeceleration;e.lateralMinGap=p.lateralMinGap;
     const auto& d=profile(e.kind).motion;
     e.desiredSpeed=sample({d.speedMean,d.speedStdDev},.05,50);
     e.acceleration=sample({d.accelerationMean,d.accelerationStdDev},.05,100);
@@ -156,6 +165,8 @@ bool Simulation::setEntityMotion(std::uint64_t id,double speed,double accelerati
 void Simulation::setTrafficLights(std::vector<TrafficLight> lights) {
     std::vector<std::uint64_t> identities;
     for(auto& light:lights) {
+        if(!finite(light.outDirection) || light.anchorNode< -1)throw std::invalid_argument("Invalid signal direction or anchor");
+        light.outDirection=light.controlledDirection();
         bool automaticIdentity=!light.id;
         if(!light.id) {
             for(const auto& old:lights_) if(length(old.a-light.a)+length(old.b-light.b)<1e-8 && std::find(identities.begin(),identities.end(),old.id)==identities.end()) { light.id=old.id; break; }
@@ -206,10 +217,11 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
     auto sweep=geometry::swept(from,to,pad);
     if(!geometry::fits(map_,sweep,pad)) return false;
     if(!fitsLaneRoute(from,e) || !fitsLaneRoute(to,e)) return false;
-    if(traffic && turnYieldBlocks(from,to,e)) return false;
+    if(e.changingLanes && !laneChangeAllowed(e.changingFrom,e.changingTo,from.center,to.center,std::hypot(e.length,e.width))) return false;
+    if(traffic && !e.escapingGridlock && turnYieldBlocks(from,to,e)) return false;
     auto clear=[&](const Entity& other) {
         if(other.id==e.id) return true;
-        double gap=std::min(e.preferredDistance,other.preferredDistance);
+        double gap=e.escapingGridlock?0:movementGap(e,other);
         // Desired lateral gaps guide placement; motion enforces the preferred minimum.
         bool sameQueue=planningSignalBatch_ && planningSignalLight_>=0 && other.signalLight==planningSignalLight_ &&
             other.signalForward.x*planningSignalForward_.x+other.signalForward.y*planningSignalForward_.y>.5;
@@ -224,14 +236,14 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
             afterClaim.x*claimForward.x+afterClaim.y*claimForward.y>ahead+1e-10;
         // A following merge must not reserve the leader's escape. Physical
         // body clearance still applies below; only the future claim is ignored.
-        if(flow_.sublanes && !clearingAhead && !(e.cooperativeRecovery && !e.laneRoute.empty()) && other.reservesSublaneGap()) for(const auto& piece:other.sublaneReservation)
+        if(!e.escapingGridlock && flow_.sublanes && !clearingAhead && !(e.cooperativeRecovery && !e.laneRoute.empty()) && other.reservesSublaneGap()) for(const auto& piece:other.sublaneReservation)
             if(piece.end>=other.next && geometry::violatesClearance(sweep,piece.sweep,gap+pad+piece.padding)) return false;
         double bound=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+gap+length(to.center-from.center)+pad;
         if(length(from.center-other.center)<=bound && geometry::violatesClearance(sweep,corners(other.footprint()),gap+pad) &&
            !geometry::motionClearance(from,to,other.footprint(),gap,e.cooperativeRecovery)) return false;
-        if(reservations && !other.reservedTurn.empty() &&
+        if(reservations && !e.escapingGridlock && !other.reservedTurn.empty() &&
            geometry::violatesClearance(sweep,other.reservedTurn,gap+pad+other.turnPadding)) return false;
-        if(reservations && !other.reservedApproach.empty() &&
+        if(reservations && !e.escapingGridlock && !other.reservedApproach.empty() &&
            geometry::violatesClearance(sweep,other.reservedApproach,gap+pad+other.turnPadding)) return false;
         return true;
     };
@@ -240,7 +252,7 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
         if(collisionWorkers_>1 && entities_.size()>=32) {
             std::vector<const Entity*> candidates;
             for(const auto& other:entities_) if(other.id!=e.id) {
-                double gap=std::min(e.preferredDistance,other.preferredDistance);
+                double gap=movementGap(e,other);
                 double bound=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+gap+length(to.center-from.center)+pad;
                 if((planningSignalBatch_ && other.signalLight>=0) || length(from.center-other.center)<=bound || (flow_.sublanes && other.reservesSublaneGap()) ||
                    (reservations && (!other.reservedTurn.empty() || !other.reservedApproach.empty()))) candidates.push_back(&other);
@@ -257,10 +269,11 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
     return true;
 }
 bool Simulation::blockedByManeuver(const Footprint& from,const Footprint& to,const Entity& e) const {
+    if(e.escapingGridlock) return false;
     if(turnYieldBlocks(from,to,e)) return true;
     double pad; auto sweep=geometry::swept(from,to,pad);
     for(const auto& other:entities_) if(other.id!=e.id && !other.reservedTurn.empty()) {
-        double gap=std::min(e.preferredDistance,other.preferredDistance)+pad+other.turnPadding;
+        double gap=movementGap(e,other)+pad+other.turnPadding;
         if(geometry::violatesClearance(sweep,other.reservedTurn,gap) ||
            geometry::violatesClearance(sweep,other.reservedApproach,gap)) return true;
     }
@@ -328,7 +341,7 @@ bool Simulation::reserveManeuver(Entity& e,const PathManeuver& maneuver) {
     approach=geometry::convexHull(std::move(approach));
     auto free=[&](const std::vector<Vec2>& polygon,double padding) {
         for(const auto& other:entities_) if(other.id!=e.id) {
-            double gap=std::min(e.preferredDistance,other.preferredDistance)+padding;
+            double gap=movementGap(e,other)+padding;
             if(geometry::violatesClearance(polygon,corners(other.footprint()),gap)) return false;
             gap+=other.turnPadding;
             if(geometry::violatesClearance(polygon,other.reservedTurn,gap) || geometry::violatesClearance(polygon,other.reservedApproach,gap)) return false;
@@ -353,7 +366,7 @@ bool Simulation::reserveManeuver(Entity& e,const PathManeuver& maneuver) {
 }
 bool Simulation::blockedByLight(const Footprint& from,const Footprint& to,const Entity& entity) const {
     double padding; auto sweep=geometry::swept(from,to,padding);
-    for(const auto& light:lights_) if(lightStops(light,entity) &&
+    for(const auto& light:lights_) if(light.phase(seconds_)!=LightPhase::Green && light.controlsMovement(from.center,to.center) && !routePermitsRed(entity,light) &&
        !geometry::intersectsLine(corners(from),light.a,light.b) &&
        geometry::distance(sweep,{light.a,light.b})<=padding+1e-8) return true;
     return false;
@@ -409,7 +422,7 @@ std::vector<Vec2> Simulation::plan(const Entity& e,double variation,bool traffic
     std::vector<double> congestion(navigation_.regions().size(),0);
     if(routing_.rtsStyle && routing_.congestionWeight>0) for(const auto& other:entities_) if(other.id!=e.id) {
         int region=navigation_.regionAt(other.center);
-        if(region>=0) congestion[region]+=(other.length+other.preferredDistance)*(other.width+other.preferredDistance)/navigation_.regions()[region].area;
+        if(region>=0) congestion[region]+=(other.length+routeBuffer(other))*(other.width+routeBuffer(other))/navigation_.regions()[region].area;
     }
     auto heuristic=[&](Vec2 p) {
         double direct=length(e.goal-p); int region=navigation_.regionAt(p);
@@ -571,15 +584,22 @@ bool Simulation::spawnRandom(double variation) {
     return false;
 }
 void Simulation::tick(double seconds) {
+#ifdef _WIN32
+    if(sumoBackend_) { sumoBackend_->step(seconds); return; }
+#endif
     validate(seconds,1e-8,10,"Time step must be positive and at most 10 seconds");
     int steps=static_cast<int>(std::ceil(seconds/.01));
     for(int i=0;i<steps;++i) advance(seconds/steps);
     ++ticks_;
 }
 void Simulation::advance(double dt) {
+    drivingSnapshot_.clear();drivingStep_=dt;
+    for(auto& e:entities_) {e.emergencyBraking=false;e.contactLimited=false;e.gapCompressed=false;e.escapeOverlap=false;}
+    updateGridlockEscapes();
     std::vector<Vec2> before; before.reserve(entities_.size());
     for(const auto& entity:entities_) before.push_back(entity.center);
     for(auto& e:entities_) advanceNetworkStage(e);
+    preparePriorityYields();
     updateLaneChanges();
     updateSublanes();
     bool hasStoppingSignal=false,phaseChanged=signalPhases_.size()!=lights_.size();
@@ -716,6 +736,8 @@ void Simulation::advance(double dt) {
         }
     }
     bool replanned=recoveryPreview_ || refreshMovingRoute();
+    prepareApproachSpeeds();
+    prepareDrivingSnapshot(dt);
     for(auto& e:entities_) {
         if(e.waitingForJunction) { e.speed=0; continue; }
         if(e.signalLight!=-1 && e.next>=e.path.size()) {
@@ -730,7 +752,8 @@ void Simulation::advance(double dt) {
             }
             if(!red) releaseSignalSlot(e);
         }
-        if(flow_.predictiveJunctions && e.inOpenJunction && !e.networkRoute.empty() && advancePredictiveVehicle(e,dt)) continue;
+        if(e.priorityYielding && e.inOpenJunction){e.speed=0;continue;}
+        if(flow_.predictiveJunctions && e.onJunction() && !e.networkRoute.empty() && advancePredictiveVehicle(e,dt)) continue;
         if(e.laneRoute.empty() && tugSettings_.enabled && advanceTug(e,dt)) continue;
         if(e.usingLocalDetour && (e.center.x-e.detourMerge.x)*e.detourExitDirection.x+
            (e.center.y-e.detourMerge.y)*e.detourExitDirection.y>=0) e.usingLocalDetour=false;
@@ -826,7 +849,7 @@ void Simulation::advance(double dt) {
                 Footprint entry{e.path[maneuver.begin],e.pathHeadings[maneuver.begin],e.length,e.width};
                 e.waitingForManeuver=blockedByManeuver(e.footprint(),entry,e);
                 for(const auto& other:entities_) if(other.id!=e.id && !other.reservedTurn.empty()) {
-                    double gap=std::min(e.preferredDistance,other.preferredDistance)+maneuver.padding+other.turnPadding;
+                    double gap=movementGap(e,other)+maneuver.padding+other.turnPadding;
                     if(geometry::violatesClearance(maneuver.sweep,other.reservedTurn,gap) ||
                        geometry::violatesClearance(maneuver.sweep,other.reservedApproach,gap)) e.waitingForManeuver=true;
                 }
@@ -835,12 +858,12 @@ void Simulation::advance(double dt) {
         };
         bool ready=true;
         double deniedEntryDistance=std::numeric_limits<double>::infinity();
-        if(e.turnExitBlocked) {
+        if(e.turnExitBlocked && !e.escapingGridlock) {
             deniedEntryDistance=0; Vec2 previous=e.center;
             for(std::size_t i=e.next;i<=e.blockedTurnEntry && i<e.path.size();++i) { deniedEntryDistance+=length(e.path[i]-previous); previous=e.path[i]; }
             ready=deniedEntryDistance>1e-8; e.waitingForManeuver=!ready;
         }
-        if(e.laneRoute.empty() && !e.turnExitBlocked && e.signalLight<0 && !e.cooperativeRecovery && !ownsNegotiatedTurn(e) && !maneuverYieldTo(e) && e.reservedTurn.empty()) for(const auto& maneuver:e.maneuvers) if(maneuver.end>=e.next) {
+        if(!e.escapingGridlock && e.laneRoute.empty() && !e.turnExitBlocked && e.signalLight<0 && !e.cooperativeRecovery && !ownsNegotiatedTurn(e) && !maneuverYieldTo(e) && e.reservedTurn.empty()) for(const auto& maneuver:e.maneuvers) if(maneuver.end>=e.next) {
             double approach=0; Vec2 previous=e.center;
             for(std::size_t i=e.next;i<=maneuver.begin;++i) { approach+=length(e.path[i]-previous); previous=e.path[i]; }
             if(approach<std::max({3.0,e.length*1.5,e.speed*.6})) {
@@ -865,6 +888,7 @@ void Simulation::advance(double dt) {
         double bendTarget=urbanSpeedLimit(e,followingTarget,brakingForBend,&bendBraking);
         double targetSpeed=negotiatedSpeed(e,bendTarget),travel=0,newSpeed=0;
         targetSpeed=laneMergeSpeed(e,targetSpeed);
+        if(e.escapingGridlock) targetSpeed=std::min(e.desiredSpeed,gridlockEscape_.speed);
         if(e.cooperativeRecovery && !e.laneRoute.empty() && e.next<=e.reservationEnd) targetSpeed=std::min(.5,e.desiredSpeed);
         if(!e.networkRoute.empty()) targetSpeed=std::min(targetSpeed,lanes_[e.networkRoute[e.networkStage]].speedLimit);
         else for(int lane:e.laneRoute) targetSpeed=std::min(targetSpeed,lanes_[lane].speedLimit);
@@ -883,10 +907,16 @@ void Simulation::advance(double dt) {
             travel=e.speed*slowing-.5*braking*slowing*slowing+targetSpeed*(dt-slowing);
             newSpeed=std::max(targetSpeed,e.speed-braking*dt);
         }
+        if(carFollowing_.enabled) {
+            newSpeed=std::max(std::min(targetSpeed,e.speed+e.acceleration*dt),std::max(0.,e.speed-e.emergencyDeceleration*dt));
+            travel=newSpeed*dt;
+            e.emergencyBraking=e.speed-newSpeed>e.deceleration*dt+1e-6;
+        }
         if(std::isfinite(deniedEntryDistance) && travel>=deniedEntryDistance) {
             travel=deniedEntryDistance; newSpeed=0;
         }
         bool accepted=ready;
+        double movedThisTick=0,previousSpeed=e.speed;
         while(accepted && travel>1e-12 && e.next<e.path.size()) {
             if(e.laneRoute.empty() && !e.turnExitBlocked && e.signalLight<0 && !e.cooperativeRecovery && !ownsNegotiatedTurn(e) && !maneuverYieldTo(e) && e.reservedTurn.empty()) for(const auto& maneuver:e.maneuvers)
                 if(e.next>maneuver.begin && e.next<=maneuver.end) { accepted=acquire(maneuver); break; }
@@ -900,18 +930,29 @@ void Simulation::advance(double dt) {
             to.heading=e.pathHeadings[e.next-1]+angleDelta(e.pathHeadings[e.next-1],e.pathHeadings[e.next])*progress;
             e.waitingForLight=blockedByLight(from,to,e);
             accepted=length(to.center-from.center)<=move+1e-7 && !e.waitingForLight && feasible(from,to,e,true);
+            if(!accepted && carFollowing_.enabled && length(to.center-from.center)<=move+1e-7) {
+                double fraction=clearMovementFraction(from,to,e,true);
+                e.contactLimited=!e.waitingForLight;
+                if(fraction>0) {
+                    e.center=from.center+(to.center-from.center)*fraction;
+                    e.heading=from.heading+angleDelta(from.heading,to.heading)*fraction;
+                    e.segmentProgress+=move*fraction;movedThisTick+=move*fraction;
+                    if(e.signalLight!=-1)e.signalRemaining=std::max(0.,e.signalRemaining-move*fraction);
+                }
+            }
             if(!accepted) {
                 e.waitingForManeuver=blockedByManeuver(from,to,e);
                 if(!e.waitingForLight) {
                     double pad; auto sweep=geometry::swept(from,to,pad);
                     for(const auto& other:entities_) if(other.id!=e.id && other.waitingForLight &&
-                        geometry::distance(sweep,corners(other.footprint()))<std::min(e.preferredDistance,other.preferredDistance)+pad+1e-6) {
+                        geometry::distance(sweep,corners(other.footprint()))<movementGap(e,other)+pad+1e-6) {
                         e.waitingForLight=true; break;
                     }
                 }
                 break;
             }
             e.center=to.center; e.heading=to.heading; e.segmentProgress+=move; travel-=move;
+            movedThisTick+=move;
             if(e.signalLight!=-1) e.signalRemaining=std::max(0.0,e.signalRemaining-move);
             if(e.segmentProgress>=segment-1e-10) {
                 ++e.next; e.segmentProgress=0;
@@ -920,7 +961,7 @@ void Simulation::advance(double dt) {
         }
         if(accepted) { e.speed=newSpeed; e.blockedSeconds=0; }
         else {
-            e.speed=0; e.blockedSeconds+=dt;
+            e.speed=carFollowing_.enabled?std::min(newSpeed,movedThisTick/dt):0; e.blockedSeconds+=dt;
             if(e.laneRoute.empty() && !e.turnExitBlocked && !ownsNegotiatedTurn(e) && !maneuverYieldTo(e) && e.signalLight==-1 && !e.waitingForLight && !e.waitingForManeuver && e.reservedTurn.empty() && e.blockedSeconds>.6 && seconds_>=e.replanAfter && !replanned &&
                (!e.following || e.currentStopSeconds>3) && !e.signalQueue && !e.maneuverQueue) {
                 bool repaired=routing_.rtsStyle && localDetour(e);
@@ -930,6 +971,7 @@ void Simulation::advance(double dt) {
                 e.replanAfter=seconds_+std::min(15.0,2.0*(1+e.replanFailures))+(e.id%7)*.1; replanned=true;
             }
         }
+        if(carFollowing_.enabled && previousSpeed-e.speed>e.deceleration*dt+1e-6)e.emergencyBraking=true;
         e.waitingForLight=e.waitingForLight || (e.following && e.signalQueue);
         e.waitingForManeuver=e.waitingForManeuver || (e.following && e.maneuverQueue);
         if(e.waitingForLight) { e.noProgressSeconds=0; e.reservedTurn.clear(); e.reservedApproach.clear(); }
@@ -953,6 +995,7 @@ void Simulation::advance(double dt) {
             e.junctionStationarySeconds+=dt;
         else e.junctionStationarySeconds=0;
     }
+    if(!recoveryPreview_) {recordEscapeOverlaps();recordDrivingStatistics();}
     entities_.erase(std::remove_if(entities_.begin(),entities_.end(),[this](const Entity& e) {
         if(!e.networkRoute.empty() && e.networkStage+1<e.networkRoute.size()) return false;
         if(e.signalLight!=-1) return false;
@@ -962,7 +1005,7 @@ void Simulation::advance(double dt) {
         ++completed_; return true;
     }),entities_.end());
     seconds_+=dt;
-    if(!recoveryPreview_) { clearStuckVehicles(); updateTrafficMonitoring(dt); }
+    if(!recoveryPreview_) { updateGridlockEscapes(); clearStuckVehicles(); updateTrafficMonitoring(dt); }
 }
 void Simulation::recordFinishedStopTime(const Entity& e) {
     completedStopMin_=(completed_+removedStuckVehicles_)?std::min(completedStopMin_,e.stoppedSeconds):e.stoppedSeconds;

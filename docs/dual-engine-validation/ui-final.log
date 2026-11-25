@@ -1,0 +1,13 @@
+Test project D:/whateveraboutit/Traffic_Simulation/build
+    Start 11: simulation_engine_switch
+    Start  9: sumo_ui_startup
+1/4 Test  #9: sumo_ui_startup ..................   Passed    2.03 sec
+    Start 10: native_ui_startup
+2/4 Test #10: native_ui_startup ................   Passed    0.30 sec
+    Start 12: editor_tools_and_manual
+3/4 Test #12: editor_tools_and_manual ..........   Passed    0.15 sec
+4/4 Test #11: simulation_engine_switch .........   Passed    3.41 sec
+
+100% tests passed out of 4
+
+Total Test time (real) =   3.93 sec

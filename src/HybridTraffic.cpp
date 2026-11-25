@@ -23,17 +23,17 @@ Vec2 along(const std::vector<Vec2>& points,double distance,Vec2& direction) {
 }
 // Build one forward-only curve rather than refitting hundreds of sampled
 // guide points (which can introduce loops near a tight exit).
-MotionPath crossingPath(const Map& map,const std::vector<DirectedLane>& lanes,const Entity& e,const Entity& target) {
+MotionPath crossingPath(const Map& map,const std::vector<DirectedLane>& lanes,const Entity& e,const Entity& target,double buffer,bool unrestricted=false) {
     Vec2 forward{std::cos(e.heading),std::sin(e.heading)},out=target.exitDirection;
     double turn=std::abs(angleDelta(e.heading,std::atan2(out.y,out.x)));
-    double lead=(turn>.05 || std::abs(e.lateralOffset)>.01)?e.length*1.5+1:0;
+    double lead=!e.junctionEntryCleared && (turn>.05 || std::abs(e.lateralOffset)>.01)?e.length*1.5+1:0;
     // Stop lines on neighboring lanes may be staggered. Clear the farthest
     // nearby parallel row with the rear bumper before starting any turn.
     if(lead>0) for(const auto& lane:lanes) if(lane.roadGroup>=0 && lane.openJunction<0 &&
         length(lane.points.back()-target.junctionCenter)<=target.junctionRadius+1) {
         auto direction=unit(lane.points.back()-lane.points[lane.points.size()-2]);
         Vec2 side{-forward.y,forward.x};auto delta=lane.points.back()-e.center;
-        if(dot(direction,forward)>.95 && std::abs(dot(delta,side))<(lane.width+e.width+e.length)*.5+e.preferredDistance+.5)
+        if(dot(direction,forward)>.95 && std::abs(dot(delta,side))<(lane.width+e.width+e.length)*.5+buffer+.5)
             lead=std::max(lead,dot(delta,forward)+e.length*.5+.2);
     }
     Vec2 a=e.center+forward*lead,end=target.goal;
@@ -52,7 +52,7 @@ MotionPath crossingPath(const Map& map,const std::vector<DirectedLane>& lanes,co
             auto pose=previous;pose.center=p;pose.heading=h;double pad;auto swept=geometry::swept(previous,pose,pad);
             if(!geometry::fits(map,swept,pad)) return false;
             // Incoming road corridors may be crossed, but never followed upstream.
-            for(const auto& lane:lanes) if(lane.roadGroup>=0 && lane.openJunction<0) {
+            for(const auto& lane:lanes) if(!unrestricted && lane.roadGroup>=0 && lane.openJunction<0) {
                 for(std::size_t i=1;i<lane.points.size();++i) {
                     auto delta=lane.points[i]-lane.points[i-1];double n=length(delta);if(n<1e-8)continue;auto direction=delta*(1/n);
                     // A free crossing may traverse the junction, not cut across
@@ -81,7 +81,7 @@ MotionPath crossingPath(const Map& map,const std::vector<DirectedLane>& lanes,co
                     double along=dot(p-lane.points[i-1],direction);
                     double mouth=0;
                     if(i+1==lane.points.size() && length(lane.points.back()-target.junctionCenter)<=target.junctionRadius+1)
-                        mouth=e.length+e.preferredDistance+.5;
+                        mouth=target.internalJunction>=0?.5:e.length+buffer+.5;
                     // A queue's nose extends beyond the centerline endpoint.
                     // Protect that mouth as well as the lane interior, or a
                     // crossing can stop nose-to-nose just outside the road.
@@ -110,7 +110,7 @@ bool Simulation::prepareJunctionPlans(Entity& e) {
     e.junctionPlans.assign(e.networkRoute.size(),{});
     e.admissionPlan={};
     for(std::size_t stage=e.networkStage+1;stage<e.networkRoute.size();++stage) {
-        if(lanes_[e.networkRoute[stage]].openJunction<0) continue;
+        if(lanes_[e.networkRoute[stage]].openJunction<0 && (!carFollowing_.enabled || lanes_[e.networkRoute[stage]].internalJunction<0)) continue;
         const auto& approach=lanes_[e.networkRoute[stage-1]].points;
         Entity preview=e;
         preview.center=approach.back();
@@ -141,6 +141,8 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
     if(stage>=e.networkRoute.size()) return false;
     const auto& lane=lanes_[e.networkRoute[stage]];
     Entity candidate=e; candidate.networkStage=stage; candidate.waitingForJunction=false; candidate.turnExitBlocked=false; candidate.exitWaitFor=0;
+    candidate.internalJunction=lane.internalJunction;
+    if(lane.internalJunction>=0) { candidate.activeJunction=lane.internalJunction; candidate.junctionEnteredAt=seconds_; }
     candidate.changingLanes=false; candidate.changingFrom=candidate.changingTo=-1;
     candidate.reservedTurn.clear(); candidate.reservedApproach.clear(); candidate.usingLocalDetour=false;
     std::vector<Vec2> guide{e.center};
@@ -161,7 +163,7 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
             auto a=e.center+forward*(e.length*1.5+1);
             guide.push_back(a);
             auto end=lanes_[e.networkRoute[stage+1]].points.front();
-            double depth=std::max(e.length*2+e.preferredDistance,length(end-a)*.5);
+            double depth=std::max(e.length*2+routeBuffer(e),length(end-a)*.5);
             auto b=a+forward*depth,c=end-candidate.exitDirection*depth;
             int samples=std::max(20,static_cast<int>(std::ceil(depth*4)));
             for(int i=1;i<=samples;++i) {
@@ -178,8 +180,8 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
         }
         guide.push_back(candidate.goal);
     } else {
-        if(e.inOpenJunction) candidate.lateralOffset=0;
-        candidate.inOpenJunction=false; candidate.activeJunction=-1;
+        if(e.inOpenJunction || (e.internalJunction>=0 && !carFollowing_.enabled)) candidate.lateralOffset=0;
+        candidate.inOpenJunction=false; candidate.activeJunction=lane.internalJunction;
         candidate.laneRoute={e.networkRoute[stage]};
         if(stage) candidate.laneRoute.push_back(e.networkRoute[stage-1]);
         if(stage+1<e.networkRoute.size()) candidate.laneRoute.push_back(e.networkRoute[stage+1]);
@@ -188,14 +190,14 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
         // An approach ends at its stop line with the front bumper, not the
         // center. A bus parked center-on-node otherwise projects half its body
         // into the crossing and traps a shorter neighbor that has begun turning.
-        if(stage+1==e.networkRoute.size() || lanes_[e.networkRoute[stage+1]].openJunction>=0) {
+        if(stage+1==e.networkRoute.size() || lanes_[e.networkRoute[stage+1]].openJunction>=0 || lanes_[e.networkRoute[stage+1]].internalJunction>=0) {
             double margin=e.length*.5+.2;
             while(guide.size()>1) { auto d=guide.back()-guide[guide.size()-2]; double n=length(d); if(n>margin+.1) { guide.back()=guide.back()-unit(d)*margin; break; } margin-=n; guide.pop_back(); }
         }
         if(guide.size()<2) return false;
         if(flow_.sublanes && std::abs(candidate.lateralOffset)>.01 && lane.roadGroup>=0) {
             double tail=0;
-            bool freeExit=stage+1==e.networkRoute.size() || lanes_[e.networkRoute[stage+1]].openJunction>=0;
+            bool freeExit=stage+1==e.networkRoute.size() || lanes_[e.networkRoute[stage+1]].openJunction>=0 || lanes_[e.networkRoute[stage+1]].internalJunction>=0;
             for(std::size_t i=guide.size()-1;i>0;--i) {
                 auto at=project(lane.points,guide[i]);
                 auto direction=unit(lane.points[at.first]-lane.points[at.first-1]); Vec2 side{-direction.y,direction.x};
@@ -206,9 +208,17 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
             }
         }
         candidate.goal=guide.back();
+        if(carFollowing_.enabled && lane.internalJunction>=0 && stage+1<e.networkRoute.size()) {
+            candidate.junctionCenter=lane.junctionCenter;candidate.junctionRadius=lane.junctionRadius;
+            const auto& exit=lanes_[e.networkRoute[stage+1]];
+            candidate.goal=along(exit.points,e.length*.5+1,candidate.exitDirection);
+            double limit=std::max(0.,(exit.width-e.width)*.5-.08);
+            candidate.lateralOffset=std::clamp(e.lateralOffset,-limit,limit);
+            candidate.goal=candidate.goal+Vec2{-candidate.exitDirection.y,candidate.exitDirection.x}*candidate.lateralOffset;
+        }
     }
     const MotionPath* ready=nullptr;
-    if(lane.openJunction>=0) {
+    if(lane.openJunction>=0 || (carFollowing_.enabled && lane.internalJunction>=0)) {
         if(!e.admissionPlan.points.empty()) ready=&e.admissionPlan;
         else if(stage<e.junctionPlans.size() && !e.junctionPlans[stage].points.empty()) ready=&e.junctionPlans[stage];
     }
@@ -220,9 +230,14 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
         candidate.path.front()=e.center; candidate.pathHeadings.front()=e.heading;
         candidate.next=1; candidate.segmentProgress=0; ++candidate.routeRevision;
         candidate.reservationEnd=0; candidate.following=false; candidate.cooperativeRecovery=false;
-    } else if(lane.openJunction>=0 && stage+1<e.networkRoute.size()) {
-        auto motion=crossingPath(map_,lanes_,e,candidate);
-        if(motion.points.empty()) return false;
+    } else if((lane.openJunction>=0 || (carFollowing_.enabled && lane.internalJunction>=0)) && stage+1<e.networkRoute.size()) {
+        auto motion=crossingPath(map_,lanes_,e,candidate,routeBuffer(e),lane.semanticTransfer);
+        if(motion.points.empty()) {
+            if(!lane.semanticTransfer)return false;
+            auto alternative=plan(candidate,0,false);
+            if(alternative.empty() || !installPath(candidate,std::move(alternative),std::max(4.,e.length*2)))return false;
+            motion={candidate.path,candidate.pathHeadings,candidate.maneuvers};
+        }
         candidate.path=std::move(motion.points); candidate.pathHeadings=std::move(motion.headings); candidate.maneuvers.clear();
         candidate.next=1;candidate.segmentProgress=0;++candidate.routeRevision;
         candidate.reservationEnd=0;candidate.following=false;candidate.cooperativeRecovery=false;
@@ -235,6 +250,8 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
     e=std::move(candidate); return true;
 }
 bool Simulation::junctionAdmission(const Entity& e,int linkId,const std::vector<Vec2>& movement) const {
+    if(e.priorityYielding)return false;
+    if(e.escapingGridlock) return true;
     if(flow_.predictiveJunctions) return predictiveAdmission(e,linkId,movement);
     const auto& link=lanes_[linkId];
     if(e.networkStage+2>=e.networkRoute.size() && !link.destination) return false;
@@ -244,9 +261,10 @@ bool Simulation::junctionAdmission(const Entity& e,int linkId,const std::vector<
     else { merge=link.points.back(); direction=unit(merge-link.points.front()); }
     Footprint slot{merge,std::atan2(direction.y,direction.x),e.length*2+2,e.width};
     for(const auto& other:entities_) if(other.id!=e.id) {
-        double gap=std::min(e.preferredDistance,other.preferredDistance);
+        double gap=movementGap(e,other);
         if(geometry::violatesClearance(corners(slot),corners(other.footprint()),gap+.2)) return false;
-        if(!other.inOpenJunction || other.activeJunction!=link.openJunction) continue;
+        int junction=link.openJunction>=0?link.openJunction:link.internalJunction;
+        if(!other.onJunction() || (other.activeJunction!=junction && !link.semanticTransfer && !(other.networkStage<other.networkRoute.size() && lanes_[other.networkRoute[other.networkStage]].semanticTransfer)))continue;
         if(other.currentStopSeconds>2) return false;
         // Admit concurrent disjoint movements. Crossing corridors wait outside,
         // so a stopped exit cannot create a circular wait inside the junction.
@@ -277,14 +295,14 @@ bool Simulation::advanceNetworkStage(Entity& e) {
         // A tiny final alignment at the stop line can demand an impossible
         // rotation between two packed neighbors. Rebuild the crossing from
         // the actual pose rather than insisting on that artificial waypoint.
-        if(e.currentStopSeconds<2 || lanes_[next].openJunction<0 || stopReason(e)==StopReason::Signal) return false;
+        if(e.currentStopSeconds<2 || (lanes_[next].openJunction<0 && lanes_[next].internalJunction<0) || stopReason(e)==StopReason::Signal) return false;
         // A rigid body's steering clearance scales with its size. A fixed
         // half-meter tolerance still strands a leading bike about 0.7 m short.
         double handoffDistance=std::clamp(e.length*.5,.5,2.);
         double remaining=0;auto previous=e.center;
         for(std::size_t i=e.next;i<e.path.size();++i){remaining+=length(e.path[i]-previous);previous=e.path[i];if(remaining>handoffDistance)return false;}
     }
-    if(lanes_[next].openJunction>=0) {
+    if(lanes_[next].openJunction>=0 || lanes_[next].internalJunction>=0) {
         if(seconds_<e.junctionRetryAfter) return false;
         Entity candidate=e;
         if(!installNetworkStage(candidate,e.networkStage+1)) { e.junctionStatus="No feasible crossing from current pose"; e.junctionRetryAfter=seconds_+1; e.waitingForJunction=true; e.turnExitBlocked=true; e.speed=0; return false; }
@@ -294,10 +312,10 @@ bool Simulation::advanceNetworkStage(Entity& e) {
         // against an adjacent approach queue before its turn begins. Validate
         // the entire committed crossing against current road bodies so that
         // those queues can enter before we occupy their departure corridor.
-        if(flow_.predictiveJunctions && candidate.path.size()>1) {
+        if(flow_.predictiveJunctions && !e.escapingGridlock && candidate.path.size()>1) {
             bool blocked=false;
-            for(const auto& other:entities_) if(other.id!=e.id && !other.inOpenJunction) {
-                double gap=std::min(e.preferredDistance,other.preferredDistance);
+            for(const auto& other:entities_) if(other.id!=e.id && !other.onJunction()) {
+                double gap=movementGap(e,other);
                 auto from=e.footprint();
                 for(std::size_t i=1;i<candidate.path.size();++i) {
                     auto to=from;to.center=candidate.path[i];to.heading=candidate.pathHeadings[i];
@@ -321,7 +339,7 @@ bool Simulation::advanceNetworkStage(Entity& e) {
         }
         e=std::move(candidate); e.junctionStatus.clear(); ++junctionAdmissions_; return true;
     }
-    bool leaving=e.inOpenJunction;
+    bool leaving=e.onJunction();
     if(!installNetworkStage(e,e.networkStage+1)) { e.speed=0; return false; }
     if(leaving) ++e.junctionCrossings;
     return true;
@@ -341,7 +359,8 @@ void Simulation::updateLaneChanges() {
             } else continue;
         }
         if(e.networkRoute.empty()) { e.laneChangeStatus="legacy route / no generated passing lane"; continue; }
-        if(e.inOpenJunction) { e.laneChangeStatus="free-space junction navigation"; continue; }
+        if(e.escapingGridlock) { e.laneChangeStatus="clearing gridlock"; continue; }
+        if(e.onJunction()) { e.laneChangeStatus=e.inOpenJunction?"free-space junction navigation":"internal junction connector"; continue; }
         if(e.waitingForJunction || e.signalLight!=-1 || e.reversing || seconds_<e.laneChangeAfter) continue;
         e.laneChangeAfter=seconds_+.4;
         int id=e.networkRoute[e.networkStage]; const auto& lane=lanes_[id];
@@ -352,7 +371,7 @@ void Simulation::updateLaneChanges() {
             for(const auto& actor:entities_) if(actor.id!=e.id) {
                 auto delta=actor.center-origin; double ahead=dot(delta,direction);
                 if(ahead<=0 || ahead>std::max(30.,e.speed*5) || dot(direction,{std::cos(actor.heading),std::sin(actor.heading)})<.7) continue;
-                double gap=std::min(e.preferredDistance,actor.preferredDistance);
+                double gap=movementGap(e,actor);
                 if(std::abs(dot(delta,lateral))>(e.width+actor.width)*.5+gap) continue;
                 double space=ahead-(e.length+actor.length)*.5-gap;
                 // Compare the lanes before the leader has already forced hard
@@ -398,7 +417,7 @@ void Simulation::updateLaneChanges() {
             if(static_cast<int>(target)==id || otherLane.roadGroup<0 || otherLane.openJunction>=0) continue;
             auto at=project(otherLane.points,e.center); double lateral=length(at.second-e.center);
             bool reservedExit=false;
-            for(const auto& owner:entities_) if(owner.inOpenJunction && owner.networkStage+1<owner.networkRoute.size() && owner.networkRoute[owner.networkStage+1]==static_cast<int>(target) && length(at.second-otherLane.points.front())<e.length*4+10) reservedExit=true;
+            for(const auto& owner:entities_) if(owner.onJunction() && owner.networkStage+1<owner.networkRoute.size() && owner.networkRoute[owner.networkStage+1]==static_cast<int>(target) && length(at.second-otherLane.points.front())<e.length*4+10) reservedExit=true;
             if(reservedExit) { e.laneChangeStatus="junction exit buffer reserved"; continue; }
             Vec2 direction=unit(otherLane.points[at.first]-otherLane.points[at.first-1]);
             if(dot(direction,forward)<.95) continue;
@@ -406,7 +425,15 @@ void Simulation::updateLaneChanges() {
             // Keep the selected destination/turn. A sibling must reach the same
             // outgoing lane through a compatible internal movement.
             int replacement=-1;
-            if(e.networkStage+2<e.networkRoute.size()) {
+            if(e.networkStage+1<e.networkRoute.size() && lanes_[e.networkRoute[e.networkStage+1]].roadGroup>=0) {
+                // Signal stations can join physical lanes directly, without an
+                // intervening junction link. Do not move into a sibling that
+                // cannot continue into the committed lane beyond that station.
+                int continuation=e.networkRoute[e.networkStage+1];
+                if(std::find(otherLane.successors.begin(),otherLane.successors.end(),continuation)==otherLane.successors.end()) {
+                    e.laneChangeStatus="target cannot reach next road lane"; continue;
+                }
+            } else if(e.networkStage+2<e.networkRoute.size()) {
                 int destination=e.networkRoute[e.networkStage+2];
                 for(int link:otherLane.successors) if(std::find(lanes_[link].successors.begin(),lanes_[link].successors.end(),destination)!=lanes_[link].successors.end()) { replacement=link; break; }
                 if(replacement<0) { e.laneChangeStatus="target cannot reach chosen exit"; continue; }
@@ -421,14 +448,17 @@ void Simulation::updateLaneChanges() {
                 left-=n; merge=otherLane.points[mergeIndex];
             }
             if(left>1e-6 || mergeIndex>=otherLane.points.size()) { e.laneChangeStatus="target lane ends before merge"; continue; }
+            if(!laneChangeAllowed(id,static_cast<int>(target),e.center,merge,std::hypot(e.length,e.width))) { e.laneChangeStatus="lane change prohibited in this road section"; continue; }
             bool gap=true;
             for(auto& actor:entities_) if(actor.id!=e.id) {
                 Vec2 targetSide{-direction.y,direction.x}; double along=dot(actor.center-at.second,direction),across=std::abs(dot(actor.center-at.second,targetSide));
-                double preferred=std::min(e.preferredDistance,actor.preferredDistance);
+                double preferred=movementGap(e,actor);
                 if(actor.changingLanes && geometry::distance({e.center,merge},{actor.center,actor.laneChangeEnd})<(e.width+actor.width)*.5+preferred+.5) gap=false;
                 if(along<0 && across<(e.width+actor.width)*.5+preferred) {
                     double rearGap=-along-(e.length+actor.length)*.5;
                     double required=preferred+actor.speed*.9+std::max(0.,actor.speed-e.speed)*2.5;
+                    if(carFollowing_.enabled) required=actor.minGap+actor.speed*actor.tau+
+                        std::max(0.,brakingDistance(actor.speed,actor.deceleration,drivingStep_)-brakingDistance(e.speed,std::max(actor.deceleration,e.deceleration),drivingStep_));
                     if(rearGap<required) {
                         gap=false;
                         if(actor.speed>1.5) {
@@ -441,7 +471,7 @@ void Simulation::updateLaneChanges() {
                 Vec2 predicted=actor.center+Vec2{std::cos(actor.heading),std::sin(actor.heading)}*(actor.speed*1.5);
                 Footprint future{predicted,actor.heading,actor.length,actor.width};
                 Footprint slot{merge,std::atan2(direction.y,direction.x),e.length+2*std::max(2.,e.speed*.7),e.width};
-                if(geometry::violatesClearance(corners(slot),corners(future),std::min(e.preferredDistance,actor.preferredDistance))) { gap=false; }
+                if(geometry::violatesClearance(corners(slot),corners(future),movementGap(e,actor))) { gap=false; }
             }
             if(!gap) { e.laneChangeStatus="waiting for safe target gap (cooperation requested)"; continue; }
             Entity candidate=e; candidate.networkRoute[candidate.networkStage]=static_cast<int>(target); candidate.lateralOffset=0;

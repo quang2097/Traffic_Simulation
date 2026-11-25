@@ -2,29 +2,64 @@
 #include "traffic/Simulation.hpp"
 #include "traffic/StepBatch.hpp"
 #include "traffic/NodeGraph.hpp"
+#include "traffic/SumoBackend.hpp"
 #include <string>
+#include <map>
 
 namespace traffic {
+enum class SimulationEngine { Native, Sumo };
 class SimulationView {
 public:
-    explicit SimulationView(const char* initialMap = nullptr);
+    explicit SimulationView(const char* initialMap = nullptr,SimulationEngine engine=SimulationEngine::Sumo);
     void frame(double realSeconds);
     bool isAdvancing() const { return running_ || stepBatch_.active(); }
+    void selectEngine(SimulationEngine engine);
+    SimulationEngine engine() const { return engine_; }
+    bool engineReady() const { return engineReady_; }
+    bool editorActionActive() const;
+    void cancelEditorAction();
 private:
+    friend struct SimulationViewTestAccess;
     void reset();
     void controls();
+    void simulationControls();
     void menuBar();
     void fileAction(int action);
-    int workspace_=0;
+    int workspace_=5;
+    SimulationEngine engine_=SimulationEngine::Sumo;
+    bool engineReady_=false,manualOpen_=false,showInspector_=false;
+    int manualChapter_=0;
+    char manualSearch_[128]{};
+    void manual();
+    const char* editorActionLabel() const;
     void canvas();
     void inspector();
     void refreshMap(bool pauseTraffic,bool importSignals=false);
-    void addLight(Vec2 a,Vec2 b,bool permissive=false,Vec2 allowedA={},Vec2 allowedB={});
+    void addLight(Vec2 a,Vec2 b,bool permissive=false,Vec2 allowedA={},Vec2 allowedB={},Vec2 outDirection={},int anchorNode=-1);
     void cancelPendingLine();
     void syncSignalMask();
     void advanceTick(double seconds);
     bool applyGraph(const NodeGraph& graph);
     void nodePopup();
+    void roadSections(int road);
+    bool laneConnectionsPopup();
+    void toggleLaneExit(int road,int direction,int lane);
+    bool applyLaneExitDraft();
+    bool laneExitEditorOpen_=false,turnDirty_=false;
+    int exitRoadChoice_=-1,exitDirectionChoice_=0;
+    void roadSignalPopup();
+    void loadLaneDemo();
+    int turnRoad_=-1,turnDirection_=0,turnLane_=1,turnDraftNode_=-1,turnDraftRoad_=-1,turnDraftDirection_=-1,turnDraftLane_=-1;
+    struct ExitDraft { int node=-1,road=-1,direction=0;std::array<char,256> lanes{};std::map<int,int> priorities; };
+    std::vector<ExitDraft> turnExits_;
+    std::string turnError_;
+    std::vector<int> highlightedExitNodes_;
+    int signalRoad_=-1;
+    int nodePopupTab_=-1;
+    bool placingRoadSignal_=false;
+    bool validateRun();
+    bool validationNotice_=false,laneExitsReady_=false;
+    std::vector<std::string> validationIssues_;
     NodeGraph graph_;
     int selectedNode_=-1,connectionFrom_=-1;
     bool severing_=false;
@@ -42,9 +77,14 @@ private:
     std::mt19937 spawnNodeRandom_{42};
     Map source_;
     Simulation simulation_;
+    std::unique_ptr<SumoBackend> sumo_;
     RoutingSettings routing_;
     TrafficFlowSettings flow_{true,true,.4,.15};
     StuckVehicleSettings stuckVehicleSettings_{true,30,true,60};
+    GridlockEscapeSettings gridlockEscape_{false,15,3,1.5};
+    double sectionBegin_=10,sectionEnd_=30,openingBegin_=40,openingEnd_=55;
+    int sectionDirection_=0,sectionLane_=0;
+    bool sectionEnter_=false,sectionExit_=false;
     TrafficRecoverySettings trafficRecoverySettings_;
     UrbanTrafficSettings urbanTraffic_;
     TugSettings tugSettings_;
@@ -62,7 +102,7 @@ private:
     float stopLineLength_=10;
     int maximumVehicles_=100;
     bool showClearance_=false,placeLight_=false,verticalLine_=true;
-    bool running_=true, automatic_=true, routes_=true;
+    bool running_=true, automatic_=true, routes_=false;
     float timeScale_=1;
     double accumulator_=0, elapsed_=0;
     double planningTimeToExclude_=0;

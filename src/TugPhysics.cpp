@@ -137,7 +137,7 @@ bool Simulation::advanceTug(Entity& e,double dt) {
     if(dot(unit(delta),forward)<-.5 && std::abs(cross(unit(delta),forward))<.1)
         addForce(Vec2{-forward.y,forward.x}*(strength*.15*e.detourSide),nose);
     for(const auto& other:entities_) if(other.id!=e.id) {
-        double gap=std::min(e.preferredDistance,other.preferredDistance),range=gap+.8;
+        double gap=movementGap(e,other),range=gap+.8;
         if(length(e.center-other.center)>.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+range) continue;
         auto c=contact(from,other.footprint()); if(c.distance>=range) continue;
         double pressure=std::clamp((range-c.distance)/.8,0.0,2.0);
@@ -161,7 +161,7 @@ bool Simulation::advanceTug(Entity& e,double dt) {
     auto pose=[&](double fraction) { auto to=from; to.center=to.center+e.tugVelocity*(dt*fraction); to.heading+=e.angularVelocity*dt*fraction; return to; };
     auto trial=pose(1);
     for(auto& other:entities_) if(other.id!=e.id &&
-        !geometry::motionClearance(from,trial,other.footprint(),std::min(e.preferredDistance,other.preferredDistance),true)) {
+        !geometry::motionClearance(from,trial,other.footprint(),movementGap(e,other),true)) {
         auto c=contact(from,other.footprint()); Vec2 r=c.point-e.center,s=c.point-other.center;
         auto otherReason=stopReason(other);
         bool anchored=otherReason==StopReason::Signal || otherReason==StopReason::ManeuverYield || otherReason==StopReason::BlockedExit;

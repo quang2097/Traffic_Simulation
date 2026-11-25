@@ -39,7 +39,7 @@ bool Simulation::sameTurnStream(const Entity& e,const TurnClaim& c) const {
     if(!owner->laneRoute.empty() && e.laneRoute==owner->laneRoute) return true;
     Vec2 forward{std::cos(c.entryHeading),std::sin(c.entryHeading)},side{-forward.y,forward.x};
     if(dot(forward,{std::cos(e.heading),std::sin(e.heading)})<=.85 ||
-       std::abs(dot(e.center-c.origin,side))>=.5*(e.width+owner->width)+std::min(e.preferredDistance,owner->preferredDistance)) return false;
+       std::abs(dot(e.center-c.origin,side))>=.5*(e.width+owner->width)+movementGap(e,*owner)) return false;
     if(e.tugActive && length(e.tugVelocity)>.1 && dot(e.tugVelocity,forward)/length(e.tugVelocity)<.85) return false;
     if(e.pathHeadings.size()!=e.path.size()) return false;
     // Sharing the incoming lane is insufficient: a straight-through follower
@@ -51,7 +51,7 @@ bool Simulation::sameTurnStream(const Entity& e,const TurnClaim& c) const {
 }
 bool Simulation::insideTurn(const Footprint& f,const Entity& e,const TurnClaim& c) const {
     auto owner=turnOwner(c); if(!owner) return false;
-    auto body=corners(f); double gap=std::min(e.preferredDistance,owner->preferredDistance);
+    auto body=corners(f); double gap=movementGap(e,*owner);
     for(const auto& p:c.pieces) if(geometry::violatesClearance(body,p.polygon,gap+p.padding+.02)) return true;
     return false;
 }
@@ -91,7 +91,7 @@ bool Simulation::turnYieldBlocks(const Footprint& from,const Footprint& to,const
         if(sameTurnStream(e,c) || insideTurn(from,e,c)) continue;
         if(insideTurn(to,e,c)) return true;
         double pad; auto sweep=geometry::swept(from,to,pad); auto owner=turnOwner(c);
-        for(const auto& p:c.pieces) if(geometry::violatesClearance(sweep,p.polygon,std::min(e.preferredDistance,owner->preferredDistance)+pad+p.padding+.02)) return true;
+        for(const auto& p:c.pieces) if(geometry::violatesClearance(sweep,p.polygon,movementGap(e,*owner)+pad+p.padding+.02)) return true;
     }
     return false;
 }
@@ -103,7 +103,7 @@ double Simulation::negotiatedSpeed(const Entity& e,double requested) const {
     for(const auto& c:turnClaims_) if(c.owner==e.yieldToVehicle && !insideTurn(e.footprint(),e,c)) {
         auto owner=turnOwner(c); if(!owner) continue;
         for(const auto& a:pieces) for(const auto& b:c.pieces)
-            if(geometry::violatesClearance(a.polygon,b.polygon,std::min(e.preferredDistance,owner->preferredDistance)+a.padding+b.padding+.02))
+            if(geometry::violatesClearance(a.polygon,b.polygon,movementGap(e,*owner)+a.padding+b.padding+.02))
                 return std::min(requested,std::sqrt(4*e.acceleration*std::max(0.0,a.distance-.15)));
     }
     return requested;
@@ -137,7 +137,7 @@ void Simulation::updateTurnNegotiation() {
         c.anchor=e.center; c.lastProgress=c.created=seconds_;
         double distance=0; previous=e.center;
         for(std::size_t i=e.next;i<=turn->end;++i) { distance+=length(e.path[i]-previous); previous=e.path[i]; }
-        double tail=e.length+e.preferredDistance;
+        double tail=e.length+routeBuffer(e);
         double arcDistance=distance;
         bool beforeArc=e.next<=turn->begin || (e.next==turn->begin+1 && e.segmentProgress<1e-8);
         c.clearIndex=turn->end; c.clearProgress=length(e.path[turn->end]-e.path[turn->end-1]);
@@ -158,7 +158,7 @@ void Simulation::updateTurnNegotiation() {
             last=to;
         }
         for(const auto& other:entities_) if(other.id!=e.id && !blocked) {
-            double gap=std::min(e.preferredDistance,other.preferredDistance);
+            double gap=movementGap(e,other);
             Vec2 exitForward{std::cos(exit.heading),std::sin(exit.heading)};
             bool queuedAhead=other.speed<=stoppedSpeedThreshold &&
                 dot(exitForward,{std::cos(other.heading),std::sin(other.heading)})>.8 &&
@@ -193,7 +193,7 @@ void Simulation::updateTurnNegotiation() {
         for(const auto& c:turnClaims_) {
             auto owner=turnOwner(c); if(!owner) continue;
             for(const auto& a:c.pieces) for(const auto& b:request.claim.pieces)
-                if(geometry::violatesClearance(a.polygon,b.polygon,std::min(e.preferredDistance,owner->preferredDistance)+a.padding+b.padding+.02)) free=false;
+                if(geometry::violatesClearance(a.polygon,b.polygon,movementGap(e,*owner)+a.padding+b.padding+.02)) free=false;
         }
         if(!free) continue;
         e.reservedTurn.clear(); e.reservedApproach.clear();
@@ -205,7 +205,7 @@ void Simulation::updateTurnNegotiation() {
             auto owner=turnOwner(c); if(!owner || sameTurnStream(e,c)) continue;
             bool intersects=insideTurn(e.footprint(),e,c);
             for(const auto& a:pieces) for(const auto& b:c.pieces)
-                if(geometry::violatesClearance(a.polygon,b.polygon,std::min(e.preferredDistance,owner->preferredDistance)+a.padding+b.padding+.02)) intersects=true;
+                if(geometry::violatesClearance(a.polygon,b.polygon,movementGap(e,*owner)+a.padding+b.padding+.02)) intersects=true;
             if(intersects) { e.yieldToVehicle=c.owner; e.clearingTurn=insideTurn(e.footprint(),e,c); break; }
         }
     }
@@ -220,7 +220,7 @@ void Simulation::updateTurnNegotiation() {
             for(const auto& other:entities_) {
                 auto owner=maneuverYieldTo(other);
                 if(e.id==other.id || !owner || e.id==owner || other.speed>1) continue;
-                double gap=std::min(e.preferredDistance,other.preferredDistance);
+                double gap=movementGap(e,other);
                 if(length(e.center-other.center)>.5*(std::hypot(e.length,e.width)+std::hypot(other.length,other.width))+gap+.5) continue;
                 bool blocked=false;
                 for(const auto& p:probe) if(geometry::violatesClearance(p.polygon,corners(other.footprint()),gap+p.padding+.1)) { blocked=true; break; }

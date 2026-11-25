@@ -1,0 +1,7 @@
+PROGRESS mode=legacy map=guided t=20 arrived=0 active=35
+PROGRESS mode=legacy map=guided t=40 arrived=14 active=36
+PROGRESS mode=legacy map=guided t=60 arrived=17 active=33
+PROGRESS mode=legacy map=guided t=80 arrived=17 active=33
+PROGRESS mode=legacy map=guided t=100 arrived=17 active=33
+PROGRESS mode=legacy map=guided t=120 arrived=17 active=33
+RESULT mode=legacy map=guided seed=123 offered=60 inserted=50 completed30=8 completed120=17 active=33 mean_stopped=58.6318 max_stopped=102 compressed=0 emergency=0 contact_limits=7 collisions=0 deleted=0

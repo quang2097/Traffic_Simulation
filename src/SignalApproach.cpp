@@ -54,14 +54,14 @@ int Simulation::closestStoppingLight(const Entity& e,double* routeDistance,Vec2*
     }
     for(std::size_t k=0;k<lights_.size();++k) {
         const auto& light=lights_[k];
-        if(!lightStops(light,e) || geometry::intersectsLine(corners(e.footprint()),light.a,light.b)) continue;
+        if(light.phase(seconds_)==LightPhase::Green || routePermitsRed(e,light) || geometry::intersectsLine(corners(e.footprint()),light.a,light.b)) continue;
         double walked=0; Vec2 line=light.b-light.a;
         for(std::size_t i=1;i<route.size();++i) {
             Vec2 start=route[i-1].center,delta=route[i].center-start;
             double divisor=cross(delta,line),segment=length(delta);
             if(std::abs(divisor)>1e-10) {
                 double t=cross(light.a-start,line)/divisor,u=cross(light.a-start,delta)/divisor;
-                if(t>=0 && t<=1 && u>=0 && u<=1) {
+                if(t>=0 && t<=1 && u>=0 && u<=1 && light.controlsDirection(delta)) {
                     if(walked+segment*t<nearest) { nearest=walked+segment*t; selected=static_cast<int>(k); point=start+delta*t; }
                     break;
                 }
@@ -102,7 +102,7 @@ bool Simulation::followRouteToSignal(Entity& e,int selected,bool queueBehind) {
             if(!queueBehind || !planningSignalBatch_) return false;
             double pad; auto sweep=geometry::swept(from,to,pad); bool plannedQueue=false;
             for(const auto& other:entities_) if(other.id!=e.id && other.signalLight>=0) {
-                double gap=std::min(e.preferredDistance,other.preferredDistance)+pad+.04;
+                double gap=movementGap(e,other)+pad+.04;
                 if(geometry::closerThan(sweep,corners({other.signalTarget,other.signalStopHeading,other.length,other.width}),gap)) { plannedQueue=true; break; }
             }
             if(!plannedQueue) return false;

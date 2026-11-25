@@ -18,6 +18,8 @@ NodeGraph makeJunctionDemoGraph() {
     for(auto pair:std::vector<std::pair<int,int>>{{1,0},{0,2},{3,0},{0,4}}) {
         g.connect(pair.first,pair.second,5,8); auto& road=g.connections.back(); road.roadType=2; road.laneCount=1;
     }
+    for(std::size_t r=0;r<g.connections.size();++r){auto& road=g.connections[r];int direction=road.to==0?0:1;LaneTurnRule rule;rule.direction=direction;
+        for(int target=1;target<=4;++target)rule.exits.push_back({target,{0}});road.laneTurns.push_back(rule);}
     return g;
 }
 std::vector<DirectedLane> makeDemoLanes() {

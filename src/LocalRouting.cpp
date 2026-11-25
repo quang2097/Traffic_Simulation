@@ -15,8 +15,10 @@ double extent(const Entity& e,Vec2 axis) {
 }
 }
 double Simulation::followingSpeed(Entity& e) const {
+    if(carFollowing_.enabled) return carFollowingSpeed(e);
     e.following=false;
     e.signalQueue=false; e.maneuverQueue=false;
+    if(e.escapingGridlock) return e.desiredSpeed;
     if((!routing_.rtsStyle && e.signalLight<0 && e.laneRoute.empty()) || (e.usingLocalDetour && !urbanTraffic_.enabled)) return e.desiredSpeed;
     Vec2 forward{std::cos(e.heading),std::sin(e.heading)},side{-forward.y,forward.x};
     double target=e.desiredSpeed;
@@ -28,7 +30,7 @@ double Simulation::followingSpeed(Entity& e) const {
                 return std::abs(dot(direction,lateral))*unit.length*.5+
                     std::abs(dot({-direction.y,direction.x},lateral))*unit.width*.5;
             };
-            double gap=std::min(e.preferredDistance,other.preferredDistance);
+            double gap=movementGap(e,other);
             if(std::abs(dot(other.signalTarget-e.signalTarget,lateral))>=halfWidth(e)+halfWidth(other)+gap) continue;
         }
         Vec2 delta=other.center-e.center;
@@ -42,7 +44,7 @@ double Simulation::followingSpeed(Entity& e) const {
         if(urbanTraffic_.enabled && along<.25*(e.length+other.length) && (!packedLane || alignment<.98)) continue;
         if(packedLane && alignment>.98 && along<.1 && e.id<other.id) continue;
         if(alignment<.6) continue;
-        double required=std::min(e.preferredDistance,other.preferredDistance);
+        double required=movementGap(e,other);
         double steeringMargin=packedLane?.02:0;
         if(std::abs(dot(delta,side))>=e.width*.5+extent(other,side)+required+steeringMargin) continue;
         double gap=along-e.length*.5-extent(other,forward);
@@ -75,7 +77,7 @@ bool Simulation::localDetour(Entity& e) {
     for(const auto& other:entities_) if(other.id!=e.id) {
         double along=dot(other.center-e.center,forward);
         if(along<=.1 || along>horizon+other.length || along>=nearest) continue;
-        double gap=std::min(e.preferredDistance,other.preferredDistance);
+        double gap=movementGap(e,other);
         if(geometry::closerThan(corridor,corners(other.footprint()),gap+padding+1e-6)) { blocker=&other; nearest=along; }
     }
     bool filtering=urbanTraffic_.enabled && (e.kind==VehicleKind::Motorbike || e.kind==VehicleKind::Bike);
@@ -88,7 +90,7 @@ bool Simulation::localDetour(Entity& e) {
         if(leaderForecast>=ownForecast*.85 || blocker->desiredSpeed>=e.desiredSpeed*.9) return false;
     }
     double halfAlong=extent(*blocker,forward),halfAcross=extent(*blocker,side);
-    double required=std::min(e.preferredDistance,blocker->preferredDistance);
+    double required=movementGap(e,*blocker);
     double lead=std::max(e.length,2.0);
     double firstDistance=std::max(lead,nearest-halfAlong-lead);
     double passDistance=nearest+halfAlong+lead;

@@ -1,0 +1,7 @@
+PROGRESS mode=new map=guided t=20 arrived=0 active=35
+PROGRESS mode=new map=guided t=40 arrived=13 active=37
+PROGRESS mode=new map=guided t=60 arrived=29 active=21
+PROGRESS mode=new map=guided t=80 arrived=44 active=6
+PROGRESS mode=new map=guided t=100 arrived=50 active=0
+PROGRESS mode=new map=guided t=120 arrived=50 active=0
+RESULT mode=new map=guided seed=123 offered=60 inserted=50 completed30=4 completed120=50 active=0 mean_stopped=10.8322 max_stopped=32.41 compressed=0 emergency=7 contact_limits=4 collisions=0 deleted=0

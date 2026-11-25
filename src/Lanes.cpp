@@ -1,4 +1,5 @@
 #include "traffic/Simulation.hpp"
+#include "traffic/SumoBackend.hpp"
 #include "traffic/Geometry.hpp"
 #include <algorithm>
 #include <cmath>
@@ -40,19 +41,19 @@ void Simulation::setPointBraking(Vec2 point,double value) {
 }
 double Simulation::laneMergeSpeed(const Entity& e,double requested) const {
     for(int id:e.laneRoute) {
-        if(lanes_[id].openJunction>=0) continue;
+        if(lanes_[id].openJunction>=0 || (flow_.predictiveJunctions && lanes_[id].internalJunction>=0)) continue;
         const auto junction=lanes_[id].points.front();
         auto delta=junction-e.center;
         const double distance=length(delta),ahead=delta.x*std::cos(e.heading)+delta.y*std::sin(e.heading);
         // Leave room for the winning vehicle's rear swing, not just its nose.
-        const double hold=e.length*1.5+e.preferredDistance+e.width+.5;
+        const double hold=e.length*1.5+routeBuffer(e)+e.width+.5;
         if(ahead<=0 || distance>std::max(12.0,e.speed*e.speed/(4*e.acceleration)+hold+5)) continue;
         for(const auto& other:entities_) {
             if(other.id==e.id || other.laneRoute.empty() || other.laneRoute==e.laneRoute ||
                std::find(other.laneRoute.begin(),other.laneRoute.end(),id)==other.laneRoute.end()) continue;
             auto offset=junction-other.center; double d=length(offset);
             double forward=offset.x*std::cos(other.heading)+offset.y*std::sin(other.heading);
-            if(forward<-(other.length*.5+std::min(e.preferredDistance,other.preferredDistance)+.5) || d>12) continue;
+            if(forward<-(other.length*.5+movementGap(e,other)+.5) || d>12) continue;
             // Closest approach wins; stable ID breaks near ties. An occupant
             // clearing the junction retains priority until its tail has passed.
             bool priority=forward<=0 || d<distance-.5 || (std::abs(d-distance)<=.5 && other.id<e.id);
@@ -93,7 +94,8 @@ void Simulation::setLanes(std::vector<DirectedLane> lanes) {
         if(lane.pointWidths.empty()) lane.pointWidths.resize(lane.points.size(),lane.width);
         if(lane.pointWidths.size()!=lane.points.size()) throw std::invalid_argument("Invalid lane width profile");
         for(double width:lane.pointWidths) if(!std::isfinite(width) || width<.5 || width>15) throw std::invalid_argument("Invalid tapered lane width");
-        if(!std::isfinite(lane.junctionRadius) || lane.junctionRadius<0 || lane.junctionRadius>500 || (lane.openJunction>=0 && lane.junctionRadius<=0)) throw std::invalid_argument("Invalid free-junction geometry");
+        if(!std::isfinite(lane.junctionRadius) || lane.junctionRadius<0 || lane.junctionRadius>500 || ((lane.openJunction>=0 || lane.internalJunction>=0) && lane.junctionRadius<=0)) throw std::invalid_argument("Invalid junction geometry");
+        for(const auto& rule:lane.changeSections) if(!std::isfinite(rule.begin) || !std::isfinite(rule.end) || rule.begin<0 || rule.end<rule.begin) throw std::invalid_argument("Invalid lane change section");
         if(!std::isfinite(lane.turnSmoothing) || lane.turnSmoothing<.2 || lane.turnSmoothing>4) throw std::invalid_argument("Invalid turn smoothing");
         if(!std::isfinite(lane.spawnRate) || lane.spawnRate<0 || lane.spawnRate>100) throw std::invalid_argument("Invalid lane spawn rate");
         if(lane.sourceNode< -1 || lane.destinationNode< -1 || (lane.excludeOwnDestination && lane.sourceNode<0)) throw std::invalid_argument("Invalid origin destination policy");
@@ -137,7 +139,7 @@ void Simulation::setLanes(std::vector<DirectedLane> lanes) {
     lanes_=std::move(lanes);
 }
 void Simulation::saveLanes(const std::string& file) const {
-    std::ofstream out(file); out<<std::setprecision(17)<<"TRAFFIC_LANES 8 "<<lanes_.size()<<'\n';
+    std::ofstream out(file); out<<std::setprecision(17)<<"TRAFFIC_LANES 9 "<<lanes_.size()<<'\n';
     for(const auto& lane:lanes_) {
         out<<lane.width<<' '<<lane.speedLimit<<' '<<lane.entry<<' '<<lane.points.size()<<' '<<lane.successors.size()<<'\n';
         out<<lane.turnDeceleration<<' '<<lane.spawnRate<<' '<<lane.turnSmoothing<<' '<<lane.inferConnections<<'\n';
@@ -146,6 +148,8 @@ void Simulation::saveLanes(const std::string& file) const {
         out<<lane.explicitTurns<<' '<<lane.turnControls.size()<<'\n';
         for(const auto& c:lane.turnControls) out<<c.point.x<<' '<<c.point.y<<' '<<c.radius<<' '<<c.braking<<'\n';
         out<<lane.sourceNode<<' '<<lane.destinationNode<<' '<<lane.excludeOwnDestination<<'\n';
+        out<<lane.internalJunction<<' '<<lane.changeSections.size()<<'\n';
+        for(const auto& rule:lane.changeSections) out<<rule.begin<<' '<<rule.end<<' '<<rule.allowEnter<<' '<<rule.allowExit<<'\n';
         for(std::size_t i=0;i<lane.points.size();++i) out<<lane.points[i].x<<' '<<lane.points[i].y<<' '<<lane.pointBraking[i]<<' '<<lane.pointWidths[i]<<'\n';
         for(auto id:lane.successors) out<<id<<' '; out<<'\n';
     }
@@ -153,7 +157,7 @@ void Simulation::saveLanes(const std::string& file) const {
 }
 void Simulation::loadLanes(const std::string& file) {
     std::ifstream in(file); std::string magic; int version; std::size_t count;
-    if(!(in>>magic>>version>>count) || magic!="TRAFFIC_LANES" || version<1 || version>8 || count>4096) throw std::runtime_error("Invalid lane network file");
+    if(!(in>>magic>>version>>count) || magic!="TRAFFIC_LANES" || version<1 || version>9 || count>4096) throw std::runtime_error("Invalid lane network file");
     std::vector<DirectedLane> lanes(count); std::size_t total=0;
     for(auto& lane:lanes) {
         std::size_t points,links;
@@ -168,6 +172,12 @@ void Simulation::loadLanes(const std::string& file) {
             lane.turnControls.resize(controls); for(auto& c:lane.turnControls) if(!(in>>c.point.x>>c.point.y>>c.radius>>c.braking)) throw std::runtime_error("Invalid turn control");
         }
         if(version>=8 && !(in>>lane.sourceNode>>lane.destinationNode>>lane.excludeOwnDestination)) throw std::runtime_error("Invalid origin destination metadata");
+        if(version>=9) {
+            std::size_t sections;
+            if(!(in>>lane.internalJunction>>sections) || lane.internalJunction< -1 || sections>10000) throw std::runtime_error("Invalid internal junction metadata");
+            lane.changeSections.resize(sections);
+            for(auto& rule:lane.changeSections) if(!(in>>rule.begin>>rule.end>>rule.allowEnter>>rule.allowExit)) throw std::runtime_error("Invalid lane change section");
+        }
         lane.points.resize(points); lane.successors.resize(links);
         lane.pointBraking.resize(points,0);
         lane.pointWidths.resize(points,lane.width);
@@ -181,6 +191,12 @@ void Simulation::loadLanes(const std::string& file) {
     setLanes(std::move(lanes));
 }
 bool Simulation::fitsLaneRoute(const Footprint& f,const Entity& e) const {
+    if(e.internalJunction>=0 && e.networkStage<e.networkRoute.size()) {
+        const auto& link=lanes_[e.networkRoute[e.networkStage]];
+        bool inside=true;
+        for(auto p:corners(f)) if(length(p-link.junctionCenter)>link.junctionRadius+e.length*.5) {inside=false;break;}
+        if(inside) return true;
+    }
     if(e.changingLanes && e.changingFrom>=0 && e.changingTo>=0) {
         Vec2 axis=e.laneChangeDirection,side{-axis.y,axis.x}; double low=1e100,high=-1e100;
         for(int id:{e.changingFrom,e.changingTo}) {
@@ -232,8 +248,11 @@ bool Simulation::fitsLaneRoute(const Footprint& f,const Entity& e) const {
     return true;
 }
 bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
+#ifdef _WIN32
+    if(sumoBackend_) return sumoBackend_->spawn(id,kind,destinationLane);
+#endif
     if(id<0 || id>=static_cast<int>(lanes_.size())) return false;
-    for(const auto& other:entities_) if(other.inOpenJunction && other.networkStage+1<other.networkRoute.size() && other.networkRoute[other.networkStage+1]==id) return false;
+    for(const auto& other:entities_) if(other.onJunction() && other.networkStage+1<other.networkRoute.size() && other.networkRoute[other.networkStage+1]==id) return false;
     const auto& p=profile(kind); Entity e; e.id=nextId_; e.kind=kind;
     e.spawnLane=id; e.spawnNode=lanes_[id].sourceNode;
     e.length=sample(p.length,.2,30); e.width=sample(p.width,.15,5); e.preferredDistance=sample(p.distance,0,20); e.massKg=defaultVehicleMass(kind); sampleMotion(e);
@@ -269,7 +288,7 @@ bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
                 if(!feasible(e.footprint(),e.footprint(),e,true,false)) return false;
                 // Exact preferred-gap contact leaves no room for the tiny
                 // heading changes of a continuous lane/junction handoff.
-                for(const auto& other:entities_) if(clearance(e.footprint(),other.footprint())<std::max(std::min(e.preferredDistance,other.preferredDistance),flow_.lateralGap)+.02) return false;
+                for(const auto& other:entities_) if(clearance(e.footprint(),other.footprint())<(carFollowing_.enabled?std::max({e.lateralMinGap,other.lateralMinGap,flow_.lateralGap}):std::max(movementGap(e,other),flow_.lateralGap))+.02) return false;
                 return true;
             };
             bool placed=insertable();
@@ -303,7 +322,7 @@ bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
         for(std::size_t i=1;i<left.points.size();++i) for(std::size_t j=1;j<right.points.size();++j) {
             auto u=left.points[i]-left.points[i-1],v=right.points[j]-right.points[j-1];
             if(dot(u,v)>-.8*length(u)*length(v)) continue;
-            double required=.5*(e.width+other.width)+std::min(e.preferredDistance,other.preferredDistance)+.05;
+            double required=.5*(e.width+other.width)+movementGap(e,other)+.05;
             if(geometry::distance({left.points[i-1],left.points[i]},{right.points[j-1],right.points[j]})<required) return false;
         }
     }
@@ -343,8 +362,8 @@ bool Simulation::spawnOnLane(int id,VehicleKind kind,int destinationLane) {
     // nose-to-nose and wait forever. Retain the full envelope across red queues.
     for(const auto& other:entities_) for(const auto& a:e.laneEnvelope) for(const auto& b:other.laneEnvelope) {
         if(std::cos(angleDelta(a.heading,b.heading))>-.5) continue;
-        if(length(a.center-b.center)>.5*(std::hypot(e.length,e.width)+std::hypot(other.length,other.width))+std::min(e.preferredDistance,other.preferredDistance)+.15) continue;
-        if(geometry::violatesClearance(corners(a),corners(b),std::min(e.preferredDistance,other.preferredDistance)+.15)) return false;
+        if(length(a.center-b.center)>.5*(std::hypot(e.length,e.width)+std::hypot(other.length,other.width))+movementGap(e,other)+.15) continue;
+        if(geometry::violatesClearance(corners(a),corners(b),movementGap(e,other)+.15)) return false;
     }
     // Start at rest, already tangent to the lane. A blocked insertion is deferred.
     entities_.push_back(std::move(e)); ++nextId_; return true;

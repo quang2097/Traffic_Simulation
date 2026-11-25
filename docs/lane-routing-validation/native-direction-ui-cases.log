@@ -1,0 +1,304 @@
+Start testing: Nov 22 02:02 SE Asia Standard Time
+----------------------------------------------------------
+3/17 Testing: sumo_lane_connections
+3/17 Test: sumo_lane_connections
+Command: "D:/whateveraboutit/Traffic_Simulation/build/lane_connection_tests.exe" "sumo-rules"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_lane_connections" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Actual SUMO network has exactly the 37 requested lane connections
+<end of output>
+Test time =   1.11 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_lane_connections" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_lane_connections" time elapsed: 00:00:01
+----------------------------------------------------------
+
+4/17 Testing: sumo_closed_lane
+4/17 Test: sumo_closed_lane
+Command: "D:/whateveraboutit/Traffic_Simulation/build/lane_connection_tests.exe" "sumo-closed"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_closed_lane" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Actual SUMO network has exactly the 37 requested lane connections
+<end of output>
+Test time =   1.13 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_closed_lane" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_closed_lane" time elapsed: 00:00:01
+----------------------------------------------------------
+
+5/17 Testing: sumo_directional_signals
+5/17 Test: sumo_directional_signals
+Command: "D:/whateveraboutit/Traffic_Simulation/build/lane_connection_tests.exe" "sumo-signals"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_directional_signals" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+SUMO directional red-light and road-station signal passed
+<end of output>
+Test time =   1.96 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_directional_signals" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_directional_signals" time elapsed: 00:00:01
+----------------------------------------------------------
+
+7/17 Testing: sumo_free_handoff
+7/17 Test: sumo_free_handoff
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "open"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_free_handoff" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+60s completed=15 active=9 pending=0 handoffs=17
+120s completed=33 active=15 pending=0 handoffs=36
+offered=48 completed=48 active=0 pending=0 collisions=0 physical overlaps=0 teleports=0 handoffs=48
+<end of output>
+Test time =   6.91 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_free_handoff" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_free_handoff" time elapsed: 00:00:06
+----------------------------------------------------------
+
+6/17 Testing: sumo_lanes
+6/17 Test: sumo_lanes
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "lanes"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_lanes" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+60s completed=23 active=35 pending=62 handoffs=0
+120s completed=52 active=36 pending=152 handoffs=0
+180s completed=83 active=29 pending=128 handoffs=0
+240s completed=113 active=26 pending=101 handoffs=0
+300s completed=142 active=18 pending=80 handoffs=0
+360s completed=170 active=19 pending=51 handoffs=0
+420s completed=199 active=10 pending=31 handoffs=0
+480s completed=227 active=10 pending=3 handoffs=0
+offered=240 completed=240 active=0 pending=0 collisions=0 physical overlaps=0 teleports=0 handoffs=0
+<end of output>
+Test time =  14.54 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_lanes" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_lanes" time elapsed: 00:00:14
+----------------------------------------------------------
+
+9/17 Testing: sumo_repeated_handoffs
+9/17 Test: sumo_repeated_handoffs
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "chain"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_repeated_handoffs" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+60s completed=0 active=6 pending=0 handoffs=8
+120s completed=6 active=6 pending=0 handoffs=19
+offered=12 completed=12 active=0 pending=0 collisions=0 physical overlaps=0 teleports=0 handoffs=24
+<end of output>
+Test time =   3.46 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_repeated_handoffs" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_repeated_handoffs" time elapsed: 00:00:03
+----------------------------------------------------------
+
+8/17 Testing: sumo_mixed_free
+8/17 Test: sumo_mixed_free
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "mixed"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_mixed_free" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+60s completed=12 active=12 pending=0 handoffs=15
+120s completed=27 active=16 pending=5 handoffs=29
+180s completed=38 active=7 pending=3 handoffs=40
+offered=48 completed=48 active=0 pending=0 collisions=0 physical overlaps=0 teleports=0 handoffs=48
+<end of output>
+Test time =  10.23 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_mixed_free" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_mixed_free" time elapsed: 00:00:10
+----------------------------------------------------------
+
+10/17 Testing: sumo_live_signals
+10/17 Test: sumo_live_signals
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "signals"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_live_signals" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Live signal / permission test passed; open=0 permissive=0
+<end of output>
+Test time =   1.77 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_live_signals" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_live_signals" time elapsed: 00:00:01
+----------------------------------------------------------
+
+11/17 Testing: sumo_signal_permissions
+11/17 Test: sumo_signal_permissions
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "gates"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_signal_permissions" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Live signal / permission test passed; open=0 permissive=1
+<end of output>
+Test time =   1.05 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_signal_permissions" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_signal_permissions" time elapsed: 00:00:01
+----------------------------------------------------------
+
+12/17 Testing: sumo_free_permissions
+12/17 Test: sumo_free_permissions
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "gates-open"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_free_permissions" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Live signal / permission test passed; open=1 permissive=1
+<end of output>
+Test time =   1.04 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_free_permissions" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_free_permissions" time elapsed: 00:00:01
+----------------------------------------------------------
+
+14/17 Testing: sumo_ui_startup
+14/17 Test: sumo_ui_startup
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_ui_smoke.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_ui_startup" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+sumo UI checks passed
+<end of output>
+Test time =   1.15 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_ui_startup" end time: Nov 22 02:02 SE Asia Standard Time
+"sumo_ui_startup" time elapsed: 00:00:01
+----------------------------------------------------------
+
+16/17 Testing: simulation_engine_switch
+16/17 Test: simulation_engine_switch
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_ui_smoke.exe" "switch"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"simulation_engine_switch" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+switch UI checks passed
+<end of output>
+Test time =   2.46 sec
+----------------------------------------------------------
+Test Passed.
+"simulation_engine_switch" end time: Nov 22 02:02 SE Asia Standard Time
+"simulation_engine_switch" time elapsed: 00:00:02
+----------------------------------------------------------
+
+2/17 Testing: native_directional_signals
+2/17 Test: native_directional_signals
+Command: "D:/whateveraboutit/Traffic_Simulation/build/lane_connection_tests.exe" "native-signals"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"native_directional_signals" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Native directional red-light and road-station signal passed
+Native road-mounted IN/OUT and live flips passed in four orientations, with both routing modes
+<end of output>
+Test time =   0.81 sec
+----------------------------------------------------------
+Test Passed.
+"native_directional_signals" end time: Nov 22 02:02 SE Asia Standard Time
+"native_directional_signals" time elapsed: 00:00:00
+----------------------------------------------------------
+
+1/17 Testing: lane_connections
+1/17 Test: lane_connections
+Command: "D:/whateveraboutit/Traffic_Simulation/build/lane_connection_tests.exe"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"lane_connections" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+Seven-lane matrix, two-way numbering, bounds, splitting and persistence passed
+Native lane-specific route selection passed
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"lane_connections" end time: Nov 22 02:02 SE Asia Standard Time
+"lane_connections" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/17 Testing: native_ui_startup
+15/17 Test: native_ui_startup
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_ui_smoke.exe" "native"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"native_ui_startup" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+native UI checks passed
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"native_ui_startup" end time: Nov 22 02:02 SE Asia Standard Time
+"native_ui_startup" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/17 Testing: editor_tools_and_manual
+17/17 Test: editor_tools_and_manual
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_ui_smoke.exe" "tools"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"editor_tools_and_manual" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+tools UI checks passed
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"editor_tools_and_manual" end time: Nov 22 02:02 SE Asia Standard Time
+"editor_tools_and_manual" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/17 Testing: sumo_map_demo
+13/17 Test: sumo_map_demo
+Command: "D:/whateveraboutit/Traffic_Simulation/build/sumo_integration_tests.exe" "lanes" "D:/whateveraboutit/Traffic_Simulation/tests/fixtures/map-demo/Map_demo.nodes" "D:/whateveraboutit/Traffic_Simulation/tests/fixtures/map-demo/Map_demo.png" "D:/whateveraboutit/Traffic_Simulation/tests/fixtures/map-demo/Map_demo.nodes.signals"
+Directory: D:/whateveraboutit/Traffic_Simulation/build
+"sumo_map_demo" start time: Nov 22 02:02 SE Asia Standard Time
+Output:
+----------------------------------------------------------
+60s completed=13 active=36 pending=71 handoffs=0
+120s completed=44 active=33 pending=163 handoffs=0
+180s completed=71 active=31 pending=138 handoffs=0
+240s completed=90 active=25 pending=125 handoffs=0
+300s completed=120 active=27 pending=93 handoffs=0
+360s completed=147 active=16 pending=77 handoffs=0
+420s completed=163 active=17 pending=60 handoffs=0
+480s completed=178 active=16 pending=46 handoffs=0
+540s completed=192 active=18 pending=30 handoffs=0
+600s completed=208 active=16 pending=16 handoffs=0
+660s completed=222 active=12 pending=6 handoffs=0
+720s completed=230 active=8 pending=2 handoffs=0
+offered=240 completed=240 active=0 pending=0 collisions=0 physical overlaps=0 teleports=0 handoffs=0
+<end of output>
+Test time =  15.92 sec
+----------------------------------------------------------
+Test Passed.
+"sumo_map_demo" end time: Nov 22 02:03 SE Asia Standard Time
+"sumo_map_demo" time elapsed: 00:00:15
+----------------------------------------------------------
+
+End testing: Nov 22 02:03 SE Asia Standard Time

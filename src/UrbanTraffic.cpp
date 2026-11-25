@@ -7,11 +7,15 @@
 namespace traffic {
 std::array<VehicleProfile,vehicleKindCount> vietnameseCityProfiles() {
     // Tunable demonstration assumptions, not a calibrated model of every city.
-    return {{ {{1.8,.10},{.6,.04},{.35,.07},{4,.6,1.2,.2},3},
+    std::array<VehicleProfile,vehicleKindCount> profiles{{ {{1.8,.10},{.6,.04},{.35,.07},{4,.6,1.2,.2},3},
               {{2,.12},{.7,.05},{.35,.08},{7,1,2,.3},80},
               {{4.4,.3},{1.8,.08},{1,.15},{6,1,1.6,.25},14},
               {{8,.7},{2.4,.1},{1.4,.2},{4.5,.7,.9,.15},1},
               {{10,.7},{2.4,.1},{1.4,.2},{4.5,.7,.9,.15},2} }};
+    profiles[0].minGap=.2;profiles[0].tau=.65;profiles[0].deceleration=2;profiles[0].emergencyDeceleration=5;
+    profiles[1].minGap=.25;profiles[1].tau=.65;
+    for(int i:{3,4}){profiles[i].minGap=.9;profiles[i].tau=1.1;profiles[i].deceleration=3;profiles[i].emergencyDeceleration=7;}
+    return profiles;
 }
 void Simulation::setUrbanTrafficSettings(UrbanTrafficSettings s) {
     for(double value:{s.motorbikeHeadway,s.otherHeadway,s.predictionSeconds,s.filterSpeed,s.lateralAcceleration})
@@ -55,6 +59,10 @@ double Simulation::urbanSpeedLimit(const Entity& e,double requested,bool& brakin
     }
     const double bendTarget=requested;
     brakingForBend=bendTarget<beforeBends-1e-8;
+    // Native trips already have route-aware following and junction conflict
+    // admission. A second heading-only crossing-yield rule creates phantom
+    // leaders and applies contradictory braking to the same movement.
+    if(carFollowing_.enabled && !e.networkRoute.empty()) return requested;
     Vec2 forward{std::cos(e.heading),std::sin(e.heading)};
     for(const auto& other:entities_) if(other.id!=e.id && other.speed>.1 && e.id>other.id) {
         Vec2 direction{std::cos(other.heading),std::sin(other.heading)};
@@ -68,7 +76,7 @@ double Simulation::urbanSpeedLimit(const Entity& e,double requested,bool& brakin
         if(relativeSquared<1e-8) continue;
         double closest=-(offset.x*relative.x+offset.y*relative.y)/relativeSquared;
         if(closest<=0 || closest>seconds) continue; // Diverging or beyond prediction horizon.
-        double bound=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+std::min(e.preferredDistance,other.preferredDistance);
+        double bound=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+movementGap(e,other);
         if(length(offset+relative*closest)>bound) continue;
         auto last=e.footprint(),otherLast=other.footprint();
         for(int step=1;step<=6;++step) {
@@ -78,7 +86,7 @@ double Simulation::urbanSpeedLimit(const Entity& e,double requested,bool& brakin
             pose.center=pose.center+forward*(std::min(requested,e.speed+e.acceleration*t)*t);
             obstacle.center=obstacle.center+direction*(other.speed*t);
             double p,q; auto a=geometry::swept(last,pose,p),b=geometry::swept(otherLast,obstacle,q);
-            if(geometry::violatesClearance(a,b,std::min(e.preferredDistance,other.preferredDistance)+p+q)) {
+            if(geometry::violatesClearance(a,b,movementGap(e,other)+p+q)) {
                 requested=std::min(requested,std::max(0.0,(length(pose.center-e.center)-.3)/(seconds+.2)));
                 break;
             }

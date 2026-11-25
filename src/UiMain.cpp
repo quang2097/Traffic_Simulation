@@ -31,7 +31,7 @@ int main(int argc,char** argv) {
     wc.hInstance=GetModuleHandleW(nullptr); wc.lpszClassName=L"TrafficSimulation";
     wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
     if (!RegisterClassW(&wc)) return 1;
-    HWND window=CreateWindowW(wc.lpszClassName,L"Traffic Lab",WS_OVERLAPPEDWINDOW,
+    HWND window=CreateWindowW(wc.lpszClassName,L"Traffic Lab | Native + SUMO",WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,CW_USEDEFAULT,1400,950,nullptr,nullptr,wc.hInstance,nullptr);
     if (!window) { UnregisterClassW(wc.lpszClassName,wc.hInstance); return 1; }
     HDC dc=GetDC(window);

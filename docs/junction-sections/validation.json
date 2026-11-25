@@ -1,0 +1,50 @@
+{
+  "tests_passed": 16,
+  "tests": [
+    "zero_radius_junction",
+    "gridlock_escape",
+    "road_sections",
+    "parallel_departure",
+    "traffic_monitoring",
+    "junction_handoff",
+    "lane_edge_recovery",
+    "junction_connections",
+    "traffic_flow",
+    "turn_lane_decisions",
+    "native_hybrid",
+    "predictive_hybrid",
+    "signal_approach",
+    "permissive_lights",
+    "stuck_vehicles",
+    "telemetry"
+  ],
+  "log": "regressions.log",
+  "viewer": "build/traffic_junction_sections.exe",
+  "viewer_escape_defaults": {
+    "enabled": true,
+    "stopped_seconds": 15,
+    "overlap_extra_seconds": 3,
+    "speed_cap_m_per_s": 1.5
+  },
+  "formats": {
+    "nodes": 8,
+    "lanes": 9,
+    "signals": 3
+  },
+  "sha256": {
+    "build/traffic_junction_sections.exe": "886528af799ae95c40dca8751e93cf4f094c6e90438a63b2bb3c840555723e0f",
+    "include/traffic/Simulation.hpp": "ab5aa3310558fea65a1e30ddcbd7dd77f1891265e995de677d7cb6deec15ee5a",
+    "include/traffic/NodeGraph.hpp": "63f06c0c159e0a44b655dce9e6944eb99dceaa65afc5e2d13c3a50e5149bef11",
+    "src/GridlockEscapes.cpp": "4f8e502035eb23bbc69badce1d20aecd7e089f43cdd3cd8d7ac4e23bc71eca78",
+    "src/Simulation.cpp": "54b2d4768250cfa691f6dd7f92554eae35d788f59b01664d0eeca89638311b1f",
+    "src/HybridTraffic.cpp": "d80cd55406079ab1182e4382259f8465d3dbbbdb1c58548b4857631df5029c42",
+    "src/RoadBuilder.cpp": "206a7cb85a367904ee2288578daecedc492be03c53aaa00be48ce708f95a7b67",
+    "src/NodeGraph.cpp": "08f73090ca17a9ce53cb8ba2ae23760f4e9af1ec7a9917ceaba6ac92091c7cf0",
+    "src/Lanes.cpp": "5c26e9ac7e4c7160d28facd501af85151e67157fc4d6265ae851bfd0961a2d06",
+    "src/TrafficFlow.cpp": "27a3f3e51b636cc6cc670607d38b35e3d1af7f5584c59f56d873b32623be9c8b",
+    "src/SimulationView.cpp": "b131fd52fda40c48bd5e19f93aca56d4cbc1a6cd6a45eea7d193c64290fefe07",
+    "tests/GridlockEscapeTests.cpp": "80bdae6516a2bc134fd9f27f5082ce6d49d9122ba8f0d246de840bfab4f75d17",
+    "tests/ZeroRadiusJunctionTests.cpp": "f7587b7562f0a4362ea0b61a2702fea11b93e938e591322254b40438b13e6020",
+    "tests/RoadSectionTests.cpp": "69fd491d00b2b38e0728777b9ab6fb642f2237efc83c443ede6f4a66a0b0e622"
+  }
+}
