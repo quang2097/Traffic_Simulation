@@ -35,6 +35,12 @@ void Simulation::prepareDrivingSnapshot(double dt) {
         if(e.onJunction() && e.networkStage+1<e.networkRoute.size())observation.exit=e.networkRoute[e.networkStage+1];
         if(e.onJunction())observation.junction=e.activeJunction;
         drivingSnapshot_.push_back(observation);
+        if(e.changingLanes && e.laneChangeOrigin){
+            auto claim=observation;claim.body=e.laneChangeOrigin->footprint();claim.speed=0;
+            claim.signal=claim.maneuver=false;
+            if(e.laneChangeOrigin->networkStage<e.laneChangeOrigin->networkRoute.size())claim.lane=e.laneChangeOrigin->networkRoute[e.laneChangeOrigin->networkStage];
+            drivingSnapshot_.push_back(claim);
+        }
     }
 }
 void Simulation::prepareApproachSpeeds() {
@@ -60,6 +66,7 @@ void Simulation::prepareApproachSpeeds() {
 double Simulation::carFollowingSpeed(Entity& e) const {
     e.following=false;e.signalQueue=false;e.maneuverQueue=false;e.gapCompressed=false;
     double cap=e.desiredSpeed;
+    if(e.escapeOverlap) return std::min(cap,gridlockEscape_.speed);
     if(e.approachBlocked && !e.onJunction()) {
         double remaining=0;Vec2 previous=e.center;
         for(std::size_t i=e.next;i<e.path.size();++i){remaining+=length(e.path[i]-previous);previous=e.path[i];}

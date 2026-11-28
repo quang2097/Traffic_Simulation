@@ -11,9 +11,7 @@ void Simulation::setGridlockEscapeSettings(GridlockEscapeSettings settings) {
        !std::isfinite(settings.speed) || settings.speed<.1 || settings.speed>5)
         throw std::invalid_argument("Invalid gridlock escape settings");
     gridlockEscape_=settings;
-    // Retained API fields from the earlier overlap policy are ignored. This
-    // policy only expires stale reservations; physical bodies always remain.
-    for(auto& e:entities_) e.escapeOverlap=false;
+    // An overlap already in progress must finish separating even if disabled.
 }
 void Simulation::updateGridlockEscapes() {
     if(recoveryPreview_) return;
@@ -26,16 +24,25 @@ void Simulation::updateGridlockEscapes() {
             e.escapingGridlock=e.escapeOverlap=false; e.cooperativeRecovery=false;
             continue;
         }
+        if(!gridlockEscape_.allowOverlap && clear) e.escapeOverlap=false;
+        if(gridlockEscape_.allowOverlap && !e.escapeOverlap &&
+           e.currentStopSeconds>=gridlockEscape_.overlapAfterSeconds &&
+           seconds_-e.escapeStarted>=gridlockEscape_.overlapAfterSeconds &&
+           !e.priorityYielding && !e.waitingForLight && !e.signalQueue &&
+           !maneuverYieldTo(e) && !blockedByLight(e.footprint(),stopProbe(e),e) &&
+           !(e.signalLight>=0 && e.signalLight<static_cast<int>(lights_.size()) && lightStops(lights_[e.signalLight],e))) {
+            e.escapeOverlap=true; ++overlapEscapes_;
+        }
         active=true;
         e.waitingForJunction=false; e.turnExitBlocked=false; e.yieldToVehicle=0;
         e.reservedTurn.clear(); e.reservedApproach.clear(); e.sublaneReservation.clear();
         e.junctionRetryAfter=seconds_;
     }
-    if(active || !gridlockEscape_.enabled) return;
+    if(active || (!gridlockEscape_.enabled && !gridlockEscape_.allowOverlap)) return;
     Entity* selected=nullptr;
     for(auto& e:entities_) {
         if(e.currentStopSeconds+1e-9<gridlockEscape_.afterSeconds || e.desiredSpeed<=stoppedSpeedThreshold ||
-           e.priorityYielding || e.reversing || e.waitingForLight || e.signalQueue || blockedByLight(e.footprint(),stopProbe(e),e)) continue;
+           e.priorityYielding || maneuverYieldTo(e) || e.changingLanes || e.reversing || e.waitingForLight || e.signalQueue || blockedByLight(e.footprint(),stopProbe(e),e)) continue;
         if(e.signalLight>=0 && e.signalLight<static_cast<int>(lights_.size()) && lightStops(lights_[e.signalLight],e)) continue;
         if(e.next>=e.path.size() && e.networkStage+1>=e.networkRoute.size()) continue;
         if(!selected || e.currentStopSeconds>selected->currentStopSeconds ||

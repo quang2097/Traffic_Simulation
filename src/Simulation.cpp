@@ -115,6 +115,15 @@ std::array<VehicleProfile,vehicleKindCount> defaultProfiles() {
 }
 LightPhase TrafficLight::phase(double seconds) const {
     if(!enabled) return LightPhase::Green;
+    if(externallyControlled)return externalPhase;
+    if(normalTr.active){
+        double elapsed=seconds-normalTr.epoch;
+        if(elapsed<normalTr.guard)return normalTr.guardYellow?LightPhase::Yellow:LightPhase::Red;
+        double t=std::fmod(elapsed-normalTr.guard,normalTr.cycle);if(t<0)t+=normalTr.cycle;
+        if(t>=normalTr.greenStart && t<normalTr.greenStart+normalTr.green)return LightPhase::Green;
+        if(t>=normalTr.greenStart+normalTr.green && t<normalTr.greenStart+normalTr.green+normalTr.yellow)return LightPhase::Yellow;
+        return LightPhase::Red;
+    }
     double cycle=greenSeconds+yellowSeconds+redSeconds;
     double t=std::fmod(seconds+offsetSeconds,cycle); if(t<0) t+=cycle;
     return t<greenSeconds?LightPhase::Green:t<greenSeconds+yellowSeconds?LightPhase::Yellow:LightPhase::Red;
@@ -162,10 +171,32 @@ bool Simulation::setEntityMotion(std::uint64_t id,double speed,double accelerati
     }
     return false;
 }
+bool Simulation::deleteVehicle(std::uint64_t id) {
+    auto found=std::find_if(entities_.begin(),entities_.end(),[&](const Entity& e){return e.id==id;});
+    if(found==entities_.end())return false;
+#ifdef _WIN32
+    if(sumoBackend_) {if(!sumoBackend_->deleteVehicle(id))return false;}
+    else
+#endif
+    {
+        recordFinishedStopTime(*found);entities_.erase(found);++completed_;++manuallyCompleted_;
+    }
+    drivingSnapshot_.clear();nextTurnCheck_=0;priorityCheckAfter_=0;
+    if(priorityGrant_==id)priorityGrant_=0;
+    turnClaims_.erase(std::remove_if(turnClaims_.begin(),turnClaims_.end(),[&](const auto& claim){return claim.owner==id;}),turnClaims_.end());
+    for(auto& e:entities_) {
+        if(e.yieldToVehicle==id)e.yieldToVehicle=0;
+        if(e.exitWaitFor==id){e.exitWaitFor=0;e.turnExitBlocked=false;}
+    }
+    return true;
+}
 void Simulation::setTrafficLights(std::vector<TrafficLight> lights) {
     std::vector<std::uint64_t> identities;
     for(auto& light:lights) {
         if(!finite(light.outDirection) || light.anchorNode< -1)throw std::invalid_argument("Invalid signal direction or anchor");
+        if(light.completionJunction< -1 || !finite(light.completionCenter) || !std::isfinite(light.completionRadius) || light.completionRadius<=0 || light.completionRadius>500 ||
+           (light.completeJunctionOnGreen && (light.completionJunction<0 || !map_.contains(map_.pixel(light.completionCenter)))))
+            throw std::invalid_argument("Choose a valid junction and clearing radius for green completion");
         light.outDirection=light.controlledDirection();
         bool automaticIdentity=!light.id;
         if(!light.id) {
@@ -184,6 +215,9 @@ void Simulation::setTrafficLights(std::vector<TrafficLight> lights) {
         validate(light.greenSeconds,.1,3600,"Invalid green duration");
         validate(light.yellowSeconds,0,3600,"Invalid yellow duration");
         validate(light.redSeconds,.1,3600,"Invalid red duration");
+        validate(light.trSeconds,0,3600,"Invalid normal-light Tr duration");
+        if(light.trSeconds>0 && !light.enabled)throw std::invalid_argument("Disable shared Tr before disabling a linked light");
+        if(light.trJunction< -1 || light.trGroup<0 || light.trGroup>1 || (light.trSeconds>0 && light.trJunction<0))throw std::invalid_argument("Assign the shared Tr junction and group");
         validate(light.offsetSeconds,0,10800,"Invalid phase offset");
         validate(light.queueWindowSeconds,.1,3600,"Queue window must be 0.1-3600 seconds");
         validate(light.queueThresholdPercent,0,100,"Queue threshold must be 0-100 percent");
@@ -209,6 +243,14 @@ void Simulation::setTrafficLights(std::vector<TrafficLight> lights) {
             if(length(lights[i].a-e.signalA)<1e-8 && length(lights[i].b-e.signalB)<1e-8) { e.signalLight=static_cast<int>(i); break; }
     }
     for(auto& e:entities_) e.signalRetryAfter=seconds_;
+    configureNormalTr(lights);
+    std::vector<GreenCompletionState> completionStates;
+    for(const auto& light:lights) {
+        auto old=std::find_if(greenCompletionStates_.begin(),greenCompletionStates_.end(),[&](const auto& state){return state.id==light.id;});
+        bool retain=old!=greenCompletionStates_.end() && old->enabled==light.enabled && old->complete==light.completeJunctionOnGreen && old->junction==light.completionJunction;
+        completionStates.push_back({light.id,retain?old->phase:light.phase(seconds_),light.enabled,light.completeJunctionOnGreen,light.completionJunction});
+    }
+    greenCompletionStates_=std::move(completionStates);
     lights_=std::move(lights);
     reconcileQueueDetectors();
 }
@@ -218,10 +260,16 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
     if(!geometry::fits(map_,sweep,pad)) return false;
     if(!fitsLaneRoute(from,e) || !fitsLaneRoute(to,e)) return false;
     if(e.changingLanes && !laneChangeAllowed(e.changingFrom,e.changingTo,from.center,to.center,std::hypot(e.length,e.width))) return false;
-    if(traffic && !e.escapingGridlock && turnYieldBlocks(from,to,e)) return false;
+    if(traffic && (!e.escapingGridlock || e.escapeOverlap) && turnYieldBlocks(from,to,e)) return false;
     auto clear=[&](const Entity& other) {
         if(other.id==e.id) return true;
+        if(e.escapeOverlap) return true;
         double gap=e.escapingGridlock?0:movementGap(e,other);
+        if(other.changingLanes && other.laneChangeOrigin){
+            auto rollback=other.laneChangeOrigin->footprint();
+            if(geometry::violatesClearance(sweep,corners(rollback),gap+pad) &&
+               !geometry::motionClearance(from,to,rollback,gap,e.cooperativeRecovery))return false;
+        }
         // Desired lateral gaps guide placement; motion enforces the preferred minimum.
         bool sameQueue=planningSignalBatch_ && planningSignalLight_>=0 && other.signalLight==planningSignalLight_ &&
             other.signalForward.x*planningSignalForward_.x+other.signalForward.y*planningSignalForward_.y>.5;
@@ -254,7 +302,7 @@ bool Simulation::feasible(const Footprint& from,const Footprint& to,const Entity
             for(const auto& other:entities_) if(other.id!=e.id) {
                 double gap=movementGap(e,other);
                 double bound=.5*std::hypot(e.length,e.width)+.5*std::hypot(other.length,other.width)+gap+length(to.center-from.center)+pad;
-                if((planningSignalBatch_ && other.signalLight>=0) || length(from.center-other.center)<=bound || (flow_.sublanes && other.reservesSublaneGap()) ||
+                if((planningSignalBatch_ && other.signalLight>=0) || (other.changingLanes && other.laneChangeOrigin) || length(from.center-other.center)<=bound || (flow_.sublanes && other.reservesSublaneGap()) ||
                    (reservations && (!other.reservedTurn.empty() || !other.reservedApproach.empty()))) candidates.push_back(&other);
             }
             if(candidates.size()>=8) {
@@ -594,7 +642,8 @@ void Simulation::tick(double seconds) {
 }
 void Simulation::advance(double dt) {
     drivingSnapshot_.clear();drivingStep_=dt;
-    for(auto& e:entities_) {e.emergencyBraking=false;e.contactLimited=false;e.gapCompressed=false;e.escapeOverlap=false;}
+    completeGreenJunctions();
+    for(auto& e:entities_) {e.emergencyBraking=false;e.contactLimited=false;e.gapCompressed=false;if(!e.escapingGridlock)e.escapeOverlap=false;}
     updateGridlockEscapes();
     std::vector<Vec2> before; before.reserve(entities_.size());
     for(const auto& entity:entities_) before.push_back(entity.center);
@@ -760,7 +809,7 @@ void Simulation::advance(double dt) {
         if(length(e.center-e.progressAnchor)>=.25) { e.progressAnchor=e.center; e.noProgressSeconds=0; }
         else e.noProgressSeconds+=dt;
         if(e.waitingForLight) e.noProgressSeconds=0;
-        if(e.laneRoute.empty() && !recoveryPreview_ && !e.turnExitBlocked && !maneuverYieldTo(e) && e.signalLight==-1 && !e.reversing && e.noProgressSeconds>6 && !e.waitingForLight &&
+        if(!e.escapingGridlock && e.laneRoute.empty() && !recoveryPreview_ && !e.turnExitBlocked && !maneuverYieldTo(e) && e.signalLight==-1 && !e.reversing && e.noProgressSeconds>6 && !e.waitingForLight &&
            (!e.waitingForManeuver || e.noProgressSeconds>30) && seconds_>=e.recoveryAfter) beginRecovery(e);
         e.waitingForLight=false; e.waitingForManeuver=false;
         if(e.reversing) {
@@ -888,7 +937,7 @@ void Simulation::advance(double dt) {
         double bendTarget=urbanSpeedLimit(e,followingTarget,brakingForBend,&bendBraking);
         double targetSpeed=negotiatedSpeed(e,bendTarget),travel=0,newSpeed=0;
         targetSpeed=laneMergeSpeed(e,targetSpeed);
-        if(e.escapingGridlock) targetSpeed=std::min(e.desiredSpeed,gridlockEscape_.speed);
+        if(e.escapingGridlock) targetSpeed=std::min(targetSpeed,gridlockEscape_.speed);
         if(e.cooperativeRecovery && !e.laneRoute.empty() && e.next<=e.reservationEnd) targetSpeed=std::min(.5,e.desiredSpeed);
         if(!e.networkRoute.empty()) targetSpeed=std::min(targetSpeed,lanes_[e.networkRoute[e.networkStage]].speedLimit);
         else for(int lane:e.laneRoute) targetSpeed=std::min(targetSpeed,lanes_[lane].speedLimit);
@@ -918,7 +967,7 @@ void Simulation::advance(double dt) {
         bool accepted=ready;
         double movedThisTick=0,previousSpeed=e.speed;
         while(accepted && travel>1e-12 && e.next<e.path.size()) {
-            if(e.laneRoute.empty() && !e.turnExitBlocked && e.signalLight<0 && !e.cooperativeRecovery && !ownsNegotiatedTurn(e) && !maneuverYieldTo(e) && e.reservedTurn.empty()) for(const auto& maneuver:e.maneuvers)
+            if(!e.escapingGridlock && e.laneRoute.empty() && !e.turnExitBlocked && e.signalLight<0 && !e.cooperativeRecovery && !ownsNegotiatedTurn(e) && !maneuverYieldTo(e) && e.reservedTurn.empty()) for(const auto& maneuver:e.maneuvers)
                 if(e.next>maneuver.begin && e.next<=maneuver.end) { accepted=acquire(maneuver); break; }
             if(!accepted) break;
             double segment=length(e.path[e.next]-e.path[e.next-1]);
@@ -995,6 +1044,7 @@ void Simulation::advance(double dt) {
             e.junctionStationarySeconds+=dt;
         else e.junctionStationarySeconds=0;
     }
+    for(auto& e:entities_)if(e.changingLanes && (e.speed<=stoppedSpeedThreshold || e.currentStopSeconds>0))abortStoppedLaneChange(e);
     if(!recoveryPreview_) {recordEscapeOverlaps();recordDrivingStatistics();}
     entities_.erase(std::remove_if(entities_.begin(),entities_.end(),[this](const Entity& e) {
         if(!e.networkRoute.empty() && e.networkStage+1<e.networkRoute.size()) return false;
@@ -1005,6 +1055,7 @@ void Simulation::advance(double dt) {
         ++completed_; return true;
     }),entities_.end());
     seconds_+=dt;
+    completeGreenJunctions();
     if(!recoveryPreview_) { updateGridlockEscapes(); clearStuckVehicles(); updateTrafficMonitoring(dt); }
 }
 void Simulation::recordFinishedStopTime(const Entity& e) {

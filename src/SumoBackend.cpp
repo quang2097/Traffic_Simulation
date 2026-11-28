@@ -313,7 +313,7 @@ struct SumoBackend::Impl {
                     if(!light.controlsDirection(lane.points.back()-lane.points[lane.points.size()-2]))continue;
                     if(light.anchorNode>=0 && graph.junctionAt(light.anchorNode)!=edges[link.in].to)continue;
                     if(!crosses(lane.points,light.a,light.b) && length(mid-lane.points.back())>std::max(3.,lane.width))continue;
-                    manual=true;bool permit=light.permissive && crosses(link.shape,light.allowedA,light.allowedB);
+                    manual=true;bool permit=light.permissive && light.trRemaining(s.seconds_)<0 && crosses(link.shape,light.allowedA,light.allowedB);
                     auto p=light.phase(s.seconds_);char next=permit?'g':p==LightPhase::Red?'r':p==LightPhase::Yellow?'y':'g';
                     if(!controlled || next=='r' || (next=='y' && phase!='r'))phase=next;
                     controlled=true;
@@ -362,6 +362,19 @@ struct SumoBackend::Impl {
         ++handoffCount;++s.junctionAdmissions_;return true;
     }
     void finish(std::uint64_t id,bool removed=false){auto it=trips.find(id);if(it==trips.end())return;s.recordFinishedStopTime(it->second.e);if(removed){++s.removedStuckVehicles_;++s.removedJunctionVehicles_;s.lastRemovedStuckVehicle_=id;}else ++s.completed_;trips.erase(it);}
+    bool deleteVehicle(std::uint64_t id){
+        auto it=trips.find(id);if(it==trips.end() || it->second.teleporting || (it->second.pending && !it->second.free && !it->second.returning))return false;
+        if(!it->second.free || it->second.ghost)remove(std::to_string(id));
+        finish(id);++s.manuallyCompleted_;mirror();return true;
+    }
+    void completeGreenJunctions(){
+        const auto ids=s.greenJunctionCompletionVehicles();
+        for(auto id:ids){auto it=trips.find(id);if(it==trips.end())continue;
+            if(!it->second.free || it->second.ghost)remove(std::to_string(id));
+            finish(id);++s.completedOnGreen_;
+        }
+        if(!ids.empty())mirror();
+    }
     void advanceFree(){
         mirror();s.drivingStep_=stepLength;s.prepareDrivingSnapshot(stepLength);
         for(auto& e:s.entities_) {auto it=trips.find(e.id);if(it==trips.end())continue;auto& t=it->second;
@@ -395,7 +408,7 @@ struct SumoBackend::Impl {
             t.e.deceleration=e.deceleration;t.e.emergencyDeceleration=e.emergencyDeceleration;t.e.lateralMinGap=e.lateralMinGap;
             if(!t.free)configure(t);
         }
-        updateLights();client.step();
+        completeGreenJunctions();updateLights();client.step();
         auto events=client.get({{0xab,0x7a,"",{}},{0xab,0x80,"",{}},{0xab,0x75,"",{}},{0xab,0x76,"",{}},{0xab,0x78,"",{}}});collisionCount+=events[1].number;teleportCount+=events[2].number;
         for(auto& id:events[3].list){auto it=trips.find(static_cast<std::uint64_t>(std::stoull(id)));if(it!=trips.end() && !it->second.free)it->second.teleporting=true;}
         for(auto& id:events[4].list){auto it=trips.find(static_cast<std::uint64_t>(std::stoull(id)));if(it!=trips.end())it->second.teleporting=false;}
@@ -431,12 +444,13 @@ struct SumoBackend::Impl {
             }
             if(incoming.lengths[lane]-values[n*7+5].value<=std::max(.5,t.e.speed*stepLength+.3))if(enterFree(t,edge,lane))mirror();
         }
-        advanceFree();s.recordDrivingStatistics();s.seconds_+=stepLength;++s.ticks_;s.updateTrafficMonitoring(stepLength);
+        advanceFree();s.recordDrivingStatistics();s.seconds_+=stepLength;completeGreenJunctions();++s.ticks_;s.updateTrafficMonitoring(stepLength);
     }
 };
 SumoBackend::SumoBackend(Simulation& s,const NodeGraph& graph,unsigned seed,const std::string& runtime,const std::string& project):impl_(std::make_unique<Impl>(s,graph,seed,runtime,project)){s.sumoBackend_=this;}
 SumoBackend::~SumoBackend(){if(impl_)impl_->s.sumoBackend_=nullptr;}
 bool SumoBackend::spawn(int lane,VehicleKind kind,int destination){return impl_->spawn(lane,kind,destination);}
+bool SumoBackend::deleteVehicle(std::uint64_t id){return impl_->deleteVehicle(id);}
 void SumoBackend::step(double seconds){if(!std::isfinite(seconds) || seconds<=0 || seconds>10)throw std::invalid_argument("Invalid SUMO step duration");impl_->accumulator+=seconds;while(impl_->accumulator+1e-10>=stepLength){impl_->tick();impl_->accumulator-=stepLength;}}
 std::string SumoBackend::status()const{return impl_->message+" | logs: "+impl_->project.string();}
 std::uint64_t SumoBackend::collisions()const{return impl_->collisionCount;}

@@ -52,17 +52,18 @@ void Simulation::setTrafficFlowSettings(TrafficFlowSettings settings) {
 }
 void Simulation::saveTrafficLights(const std::string& file) const {
     std::ofstream out(file); if(!out) throw std::runtime_error("Cannot save signal links");
-    out<<std::setprecision(17)<<"TRAFFIC_SIGNALS 4 "<<lights_.size()<<'\n';
+    out<<std::setprecision(17)<<"TRAFFIC_SIGNALS 6 "<<lights_.size()<<'\n';
     for(const auto& l:lights_) {
         out<<l.id<<' '<<l.a.x<<' '<<l.a.y<<' '<<l.b.x<<' '<<l.b.y<<' '<<l.greenSeconds<<' '<<l.yellowSeconds<<' '<<l.redSeconds<<' '<<l.offsetSeconds<<' '<<l.enabled<<' '<<l.permissive<<' '<<l.allowedA.x<<' '<<l.allowedA.y<<' '<<l.allowedB.x<<' '<<l.allowedB.y<<' '
-           <<l.queueWindowSeconds<<' '<<l.queueThresholdPercent<<' '<<l.queueDetectors.size()<<' '<<l.controlledDirection().x<<' '<<l.controlledDirection().y<<' '<<l.anchorNode<<'\n';
+           <<l.queueWindowSeconds<<' '<<l.queueThresholdPercent<<' '<<l.queueDetectors.size()<<' '<<l.controlledDirection().x<<' '<<l.controlledDirection().y<<' '<<l.anchorNode<<' '
+           <<l.completeJunctionOnGreen<<' '<<l.completionJunction<<' '<<l.completionCenter.x<<' '<<l.completionCenter.y<<' '<<l.completionRadius<<' '<<l.trSeconds<<' '<<l.trJunction<<' '<<l.trGroup<<'\n';
         for(const auto& line:l.queueDetectors) out<<line.id<<' '<<line.a.x<<' '<<line.a.y<<' '<<line.b.x<<' '<<line.b.y<<'\n';
     }
     if(!out) throw std::runtime_error("Cannot write signal links");
 }
 void Simulation::loadTrafficLights(const std::string& file) {
     std::ifstream in(file); std::string magic; int version; std::size_t count;
-    if(!(in>>magic>>version>>count) || magic!="TRAFFIC_SIGNALS" || version<1 || version>4 || count>10000) throw std::runtime_error("Invalid signal links file");
+    if(!(in>>magic>>version>>count) || magic!="TRAFFIC_SIGNALS" || version<1 || version>6 || count>10000) throw std::runtime_error("Invalid signal links file");
     std::vector<TrafficLight> next(count);
     std::size_t totalDetectors=0;
     for(auto& l:next) {
@@ -76,6 +77,8 @@ void Simulation::loadTrafficLights(const std::string& file) {
             if(!(in>>l.queueWindowSeconds>>l.queueThresholdPercent>>detectors) || detectors>10000 || (totalDetectors+=detectors)>100000)
                 throw std::runtime_error("Invalid queue detector configuration");
             if(version>=4 && !(in>>l.outDirection.x>>l.outDirection.y>>l.anchorNode))throw std::runtime_error("Invalid directional signal");
+            if(version>=5 && !(in>>l.completeJunctionOnGreen>>l.completionJunction>>l.completionCenter.x>>l.completionCenter.y>>l.completionRadius))throw std::runtime_error("Invalid green junction completion setting");
+            if(version>=6 && !(in>>l.trSeconds>>l.trJunction>>l.trGroup))throw std::runtime_error("Invalid normal-light Tr setting");
             l.queueDetectors.resize(detectors);
             for(auto& line:l.queueDetectors)
                 if(!(in>>line.id>>line.a.x>>line.a.y>>line.b.x>>line.b.y)) throw std::runtime_error("Incomplete queue detector line");

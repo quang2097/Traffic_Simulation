@@ -18,6 +18,12 @@ static void run(){
     a.networkRoute={0};b.networkRoute={1};a.networkStage=b.networkStage=0;a.inOpenJunction=b.inOpenJunction=true;
     sim.entities_={a,b};sim.preparePriorityYields();require(!sim.entities_[0].priorityYielding && sim.entities_[1].priorityYielding,"Smaller movement priority did not win");
     sim.seconds_=20;sim.preparePriorityYields();require(!sim.priorityGrant_ && sim.entities_[1].priorityYielding,"Default-off starvation relief changed priority");
+    sim.setGridlockEscapeSettings({false,1,0,1.5,true});
+    sim.entities_[1].currentStopSeconds=20;sim.entities_[1].desiredSpeed=4;sim.entities_[1].next=1;
+    sim.updateGridlockEscapes();require(!sim.entities_[1].escapingGridlock && !sim.entities_[1].escapeOverlap,"Overlap recovery bypassed a priority yield");
+    sim.entities_[1].escapingGridlock=true;sim.entities_[1].escapeStarted=0;
+    sim.updateGridlockEscapes();require(!sim.entities_[1].escapeOverlap,"Existing reservation escape bypassed a priority yield");
+    sim.entities_[1].escapingGridlock=false;
     auto flow=sim.flow_;flow.swapStarvedPriorities=true;flow.priorityWaitSeconds=3;sim.setTrafficFlowSettings(flow);sim.seconds_=21;sim.preparePriorityYields();
     require(sim.priorityGrant_==2 && !sim.entities_[1].priorityYielding && sim.entities_[0].priorityYielding,"Starved movement did not receive the priority grant");
     sim.entities_.erase(sim.entities_.begin()+1);sim.seconds_=22;sim.preparePriorityYields();require(!sim.priorityGrant_ && !sim.entities_[0].priorityYielding,"Priority grant or yield remained after winner left");

@@ -3,6 +3,10 @@
 #include "traffic/StepBatch.hpp"
 #include "traffic/NodeGraph.hpp"
 #include "traffic/SumoBackend.hpp"
+#include "traffic/PolicyRuntime.hpp"
+#include "traffic/TrainingData.hpp"
+#include "traffic/TrainingDataset.hpp"
+#include "traffic/SimulationResults.hpp"
 #include <string>
 #include <map>
 
@@ -11,6 +15,7 @@ enum class SimulationEngine { Native, Sumo };
 class SimulationView {
 public:
     explicit SimulationView(const char* initialMap = nullptr,SimulationEngine engine=SimulationEngine::Sumo);
+    ~SimulationView();
     void frame(double realSeconds);
     bool isAdvancing() const { return running_ || stepBatch_.active(); }
     void selectEngine(SimulationEngine engine);
@@ -31,11 +36,54 @@ private:
     int manualChapter_=0;
     char manualSearch_[128]{};
     void manual();
+    void policyPanel();
+    void pollPolicy();
+    void stopPolicy();
+    void trainingPanel();
+    void resultsPanel();
+    SimulationResult resultSnapshot() const;
+    void saveResult();
+    char resultLabel_[256]="Baseline",resultNotes_[1024]{},resultsPath_[2048]="results/comparison.csv";
+    std::string resultRunId_,resultsStatus_;
+    int runSeed_=42;
+    void updateTraining();
+    void stopTraining(const std::string& outcome="stopped");
+    void startTraining();
+    TrainingSnapshot trainingSnapshot() const;
+    SignalWaitTracker waitTracker_;
+    HoldSignalController holdTiming_;
+    RandomDemand randomDemand_;
+    TrainingRecorder trainingRecorder_;
+    TrainingDataset trainingDataset_;
+    bool trainingAppend_=true;
+    QueueConfig queueConfig_;
+    DemandConfig demandConfig_;
+    double trainingMaxRed_=60,trainingTr_=8,trainingYellow_=3,trainingMinGreen_=5,trainingDecisionInterval_=5,trainingNextDecision_=0,trainingNextSample_=0;
+    int trainingAction_=-1;
+    bool trainingRandomActions_=true,trainingRandomSpawns_=true,trainingForced_=false,policyHoldEnabled_=false;
+    TrainingSnapshot trainingPrevious_;
+    std::mt19937 trainingRandom_{42};
+    char trainingDirectory_[2048]="build/training-data";
+    std::string trainingStatus_="Record camera-limited queues, cumulative signal waits and seeded demand.";
+    PolicyRuntime policyRuntime_;
+    SignalTimingController policyTiming_;
+    std::vector<SignalRegion> policyRegions_;
+    SignalObservation policyObservation_;
+    char policyPath_[2048]{},policyPython_[2048]{};
+    int policyFamily_=0;
+    double policyInterval_=5,policyYellow_=3,policyClearance_=1,policyNextDecision_=0;
+    std::uint64_t policyEpoch_=0,policyRequestEpoch_=0;
+    bool policySelectModel_=false,policyShowRegions_=true;
+    std::string policyStatus_="Load an exported policy to control two synchronized signal groups.",policyAlgorithm_;
     const char* editorActionLabel() const;
     void canvas();
     void inspector();
+    void deleteSelectedVehicle();
     void refreshMap(bool pauseTraffic,bool importSignals=false);
     void addLight(Vec2 a,Vec2 b,bool permissive=false,Vec2 allowedA={},Vec2 allowedB={},Vec2 outDirection={},int anchorNode=-1);
+    void setGreenCompletionTarget(TrafficLight& light,int node);
+    void applyNormalTr(int junction,double seconds);
+    double normalTrDraft_=20;
     void cancelPendingLine();
     void syncSignalMask();
     void advanceTick(double seconds);

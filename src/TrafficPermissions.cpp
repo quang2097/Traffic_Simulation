@@ -14,7 +14,7 @@ bool crossing(Vec2 from,Vec2 to,Vec2 a,Vec2 b,double& fraction) {
 }
 }
 bool Simulation::routePermitsRed(const Entity& e,const TrafficLight& light) const {
-    if(!light.permissive) return false;
+    if(!light.permissive || light.trRemaining(seconds_)>=0) return false;
     bool passedStop=false,allowed=false; Vec2 previous=e.center;
     auto segment=[&](Vec2 next) {
         double stop=0,exit=0;

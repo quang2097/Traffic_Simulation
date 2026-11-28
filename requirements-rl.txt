@@ -1,0 +1,4 @@
+numpy>=1.26
+onnxruntime>=1.18
+# Install torch separately for optional TorchScript policies.
+# Install onnx separately to generate/check exports or run PolicyWorkerTests.py.

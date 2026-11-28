@@ -53,6 +53,7 @@ struct NodeGraph {
 struct CompiledRoads { std::vector<DirectedLane> lanes; std::vector<int> originNodes; };
 struct RoadSignalGeometry { Vec2 a,b,outDirection; };
 RoadSignalGeometry roadSignalAtNode(const NodeGraph& graph,int road,int node);
+int connectedSignalJunction(const NodeGraph& graph,const TrafficLight& light);
 std::vector<int> parseNumberList(const std::string& text,int minimum,int maximum);
 CompiledRoads compileRoads(const NodeGraph& graph);
 void validateRoadMask(const std::vector<DirectedLane>& lanes,const Map& map);

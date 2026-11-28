@@ -5,6 +5,30 @@
 #include <stdexcept>
 
 namespace traffic {
+int connectedSignalJunction(const NodeGraph& graph,const TrafficLight& light) {
+    int start=light.anchorNode;
+    if(start<0 || start>=static_cast<int>(graph.nodes.size())) {
+        double nearest=2;
+        for(std::size_t n=0;n<graph.nodes.size();++n){double d=length(graph.nodes[n].position-(light.a+light.b)*.5);if(d<nearest){nearest=d;start=static_cast<int>(n);}}
+    }
+    if(start<0 || start>=static_cast<int>(graph.nodes.size()))return -1;
+    std::vector<int> degree(graph.nodes.size(),0);
+    for(const auto& road:graph.connections){++degree[road.from];++degree[road.to];}
+    auto junction=[&](int n){return degree[n]>=3 || graph.nodes[n].openRadius>0 || graph.nodes[n].internalRadius>0;};
+    int shared=graph.junctionAt(start);if(junction(shared))return shared;
+    std::vector<int> queue{start};std::vector<bool> visited(graph.nodes.size(),false);visited[start]=true;
+    auto forward=light.controlledDirection();
+    for(std::size_t at=0;at<queue.size();++at){int n=queue[at];
+        if(n!=start && junction(n))return n;
+        for(const auto& road:graph.connections){int next=road.from==n?road.to:road.roadType==2 && road.to==n?road.from:-1;
+            if(next<0 || visited[next])continue;
+            auto delta=graph.nodes[next].position-graph.nodes[n].position;
+            if(n==start && delta.x*forward.x+delta.y*forward.y<=1e-9)continue;
+            visited[next]=true;queue.push_back(next);
+        }
+    }
+    return -1;
+}
 Vec2 TrafficLight::controlledDirection() const {
     Vec2 d=outDirection;if(length(d)<1e-9)d={b.y-a.y,a.x-b.x};
     return d*(1/std::max(1e-9,length(d)));

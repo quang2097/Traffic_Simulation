@@ -14,6 +14,7 @@ public:
     SumoBackend(const SumoBackend&)=delete;
     SumoBackend& operator=(const SumoBackend&)=delete;
     bool spawn(int compiledLane,VehicleKind kind,int destinationLane=-1);
+    bool deleteVehicle(std::uint64_t id);
     void step(double seconds);
     std::string status() const;
     std::uint64_t collisions() const;

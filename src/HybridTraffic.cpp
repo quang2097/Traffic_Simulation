@@ -144,6 +144,7 @@ bool Simulation::installNetworkStage(Entity& e,std::size_t stage) {
     candidate.internalJunction=lane.internalJunction;
     if(lane.internalJunction>=0) { candidate.activeJunction=lane.internalJunction; candidate.junctionEnteredAt=seconds_; }
     candidate.changingLanes=false; candidate.changingFrom=candidate.changingTo=-1;
+    candidate.laneChangeOrigin.reset();
     candidate.reservedTurn.clear(); candidate.reservedApproach.clear(); candidate.usingLocalDetour=false;
     std::vector<Vec2> guide{e.center};
     if(lane.openJunction>=0) {
@@ -344,9 +345,53 @@ bool Simulation::advanceNetworkStage(Entity& e) {
     if(leaving) ++e.junctionCrossings;
     return true;
 }
+bool Simulation::abortStoppedLaneChange(Entity& e) {
+    if(!e.changingLanes || !e.laneChangeOrigin)return false;
+    auto origin=e.laneChangeOrigin;
+    Entity restored=e;
+    restored.networkRoute=origin->networkRoute;restored.networkStage=origin->networkStage;
+    restored.laneRoute=origin->laneRoute;restored.junctionPlans=origin->junctionPlans;
+    restored.changingLanes=false;restored.changingFrom=restored.changingTo=-1;
+    restored.laneChangesDisabled=true;restored.laneChangeOrigin.reset();
+    restored.lateralOffset=0;restored.sublaneReservation.clear();restored.admissionPlan={};
+    restored.reservedTurn.clear();restored.reservedApproach.clear();
+    restored.signalLight=-1;restored.stopTargetLight=-1;restored.signalExit={};
+    restored.waitingForLight=restored.waitingForManeuver=restored.signalQueue=restored.maneuverQueue=false;
+    restored.cooperativeUntil=0;restored.cooperativeFor=0;restored.cooperativeLane=-1;
+    restored.changingLanes=false;restored.waitingForJunction=false;restored.turnExitBlocked=false;
+    restored.approachBlocked=false;restored.following=false;restored.usingLocalDetour=false;
+    restored.speed=0;restored.angularVelocity=0;
+    int source=origin->networkRoute.at(origin->networkStage);
+    auto at=project(lanes_[source].points,e.center);
+    auto direction=unit(lanes_[source].points[at.first]-lanes_[source].points[at.first-1]);
+    restored.center=at.second;restored.heading=std::atan2(direction.y,direction.x);
+    // Prefer returning sideways at the current road position. The protected
+    // original pose provides a fully clear fallback if traffic occupies it.
+    Entity projected=restored;
+    bool placed=installNetworkStage(projected,origin->networkStage) &&
+        feasible(projected.footprint(),projected.footprint(),projected,true,false);
+    if(placed)restored=std::move(projected);
+    else {
+        restored.center=origin->center;restored.heading=origin->heading;
+        restored.path=origin->path;restored.pathHeadings=origin->pathHeadings;
+        restored.maneuvers=origin->maneuvers;restored.next=origin->next;
+        restored.segmentProgress=origin->segmentProgress;restored.goal=origin->goal;
+        restored.lateralOffset=origin->lateralOffset;restored.laneEnvelope=origin->laneEnvelope;
+        if(!feasible(restored.footprint(),restored.footprint(),restored,true,false))return false;
+    }
+    restored.laneChangesDisabled=true;restored.laneChangeOrigin.reset();restored.speed=0;
+    restored.sublaneAfter=restored.laneChangeAfter=1e100;
+    restored.progressAnchor=restored.center;restored.noProgressSeconds=0;
+    restored.laneChangeStatus="Aborted stopped lane change; returned to original lane; lane changes disabled for this trip";
+    ++restored.routeRevision;
+    for(auto& actor:entities_)if(actor.cooperativeFor==e.id){actor.cooperativeUntil=0;actor.cooperativeFor=0;actor.cooperativeLane=-1;}
+    e=std::move(restored);return true;
+}
 void Simulation::updateLaneChanges() {
     if(recoveryPreview_) return;
     for(auto& e:entities_) {
+        if(e.changingLanes && e.speed<=stoppedSpeedThreshold){abortStoppedLaneChange(e);continue;}
+        if(e.laneChangesDisabled){e.laneChangeStatus="Lane changes disabled after stopped merge";continue;}
         if(e.reservesSublaneGap()) continue;
         if(e.changingLanes) {
             if(dot(e.center-e.laneChangeEnd,e.laneChangeDirection)>e.length*.5) {
@@ -355,14 +400,16 @@ void Simulation::updateLaneChanges() {
                 if(e.networkStage+1<e.networkRoute.size())settled.laneRoute.push_back(e.networkRoute[e.networkStage+1]);
                 if(!fitsLaneRoute(e.footprint(),settled)) {e.laneChangeStatus="Finishing alignment with target lane";continue;}
                 e.changingLanes=false; e.changingFrom=e.changingTo=-1;
+                e.laneChangeOrigin.reset();
                 e.laneRoute={e.networkRoute[e.networkStage]}; if(e.networkStage+1<e.networkRoute.size()) e.laneRoute.push_back(e.networkRoute[e.networkStage+1]);
             } else continue;
         }
         if(e.networkRoute.empty()) { e.laneChangeStatus="legacy route / no generated passing lane"; continue; }
         if(e.escapingGridlock) { e.laneChangeStatus="clearing gridlock"; continue; }
         if(e.onJunction()) { e.laneChangeStatus=e.inOpenJunction?"free-space junction navigation":"internal junction connector"; continue; }
-        if(e.waitingForJunction || e.signalLight!=-1 || e.reversing || seconds_<e.laneChangeAfter) continue;
-        e.laneChangeAfter=seconds_+.4;
+        if(e.waitingForJunction || e.signalLight!=-1 || e.reversing || e.speed<=stoppedSpeedThreshold || e.ageSeconds<5 || seconds_<e.laneChangeAfter) continue;
+        e.laneChangeAfter=seconds_+2;
+        double stoppingSignal=0;if(closestStoppingLight(e,&stoppingSignal)>=0 && stoppingSignal<e.speed*5+e.length*3+15){e.laneChangeStatus="Stay in lane near a stopping signal";continue;}
         int id=e.networkRoute[e.networkStage]; const auto& lane=lanes_[id];
         if(lane.roadGroup<0) continue;
         Vec2 forward{std::cos(e.heading),std::sin(e.heading)},side{-forward.y,forward.x};
@@ -388,25 +435,22 @@ void Simulation::updateLaneChanges() {
         for(std::size_t i=here.first+1;i<lane.points.size();++i) remaining+=length(lane.points[i]-lane.points[i-1]);
         int neighbors[2]={-1,-1}; double closest[2]={1e100,1e100};
         for(std::size_t target=0;target<lanes_.size();++target) {
-            const auto& other=lanes_[target]; if(static_cast<int>(target)==id || other.roadGroup<0 || other.openJunction>=0) continue;
+            const auto& other=lanes_[target]; if(static_cast<int>(target)==id || other.roadGroup!=lane.roadGroup || other.travelDirection!=lane.travelDirection || other.openJunction>=0) continue;
             auto at=project(other.points,e.center); auto direction=unit(other.points[at.first]-other.points[at.first-1]);
             double distance=length(at.second-e.center),across=dot(at.second-e.center,side);
             if(dot(direction,forward)<.95 || distance<.2 || distance>(laneWidthAt(id,e.center)+laneWidthAt(static_cast<int>(target),at.second))*.75+1) continue;
             int which=across>0?1:0; if(distance<closest[which]) { closest[which]=distance; neighbors[which]=static_cast<int>(target); }
         }
         struct Choice { int lane; double score; std::string reason; }; std::vector<Choice> choices;
-        bool preparingLeft=false;
-        if(e.networkStage+2<e.networkRoute.size()) { const auto& exit=lanes_[e.networkRoute[e.networkStage+2]]; preparingLeft=dot(unit(exit.points[1]-exit.points[0]),side)<-.25 && remaining<std::max(35.,e.desiredSpeed*8); }
         for(int target:neighbors) if(target>=0) {
             const auto& other=lanes_[target]; auto at=project(other.points,e.center); auto direction=unit(other.points[at.first]-other.points[at.first-1]);
             double speed=expectedSpeed(target,at.second,direction),score=0; std::string reason;
-            if(speed-currentSpeed>.5) { score=speed-currentSpeed; reason="speed gain"; }
+            if(speed-currentSpeed>2) { score=speed-currentSpeed; reason="substantial speed gain"; }
             if(e.networkStage+2<e.networkRoute.size() && remaining<std::max(35.,e.desiredSpeed*8)) {
                 auto exit=lanes_[e.networkRoute[e.networkStage+2]].points.front();
                 double improvement=length(lane.points.back()-exit)-length(other.points.back()-exit);
-                if(improvement>.75 && 5+improvement*.25>score) { score=5+improvement*.25; reason="strategic exit positioning"; }
+                if(improvement>2 && 5+improvement*.25>score) { score=5+improvement*.25; reason="strategic exit positioning"; }
             }
-            if(!preparingLeft && dot(at.second-e.center,side)>.2 && e.speed>3 && speed>=currentSpeed-.3 && currentSpeed>=e.desiredSpeed*.8 && score<.35) { score=.35; reason="keep right"; }
             if(score>.2) choices.push_back({target,score,reason});
         }
         std::sort(choices.begin(),choices.end(),[](const auto& a,const auto& b){return a.score>b.score;});
@@ -475,6 +519,7 @@ void Simulation::updateLaneChanges() {
             }
             if(!gap) { e.laneChangeStatus="waiting for safe target gap (cooperation requested)"; continue; }
             Entity candidate=e; candidate.networkRoute[candidate.networkStage]=static_cast<int>(target); candidate.lateralOffset=0;
+            candidate.laneChangeOrigin=std::make_shared<const Entity>(e);
             candidate.changingLanes=true; candidate.changingFrom=id; candidate.changingTo=static_cast<int>(target); candidate.laneChangeEnd=merge; candidate.laneChangeDirection=direction;
             if(replacement>=0) candidate.networkRoute[candidate.networkStage+1]=replacement;
             candidate.laneRoute={id,static_cast<int>(target)};
@@ -522,7 +567,7 @@ void Simulation::updateLaneChanges() {
             }
             if(!safe) { e.laneChangeStatus="target corridor is too tight farther ahead"; continue; }
             if(!prepareJunctionPlans(candidate)) { e.laneChangeStatus="target lane has no feasible junction crossing"; continue; }
-            candidate.goal=candidate.path.back(); candidate.laneChangeAfter=seconds_+3; ++candidate.laneChanges; candidate.laneChangeStatus="changing: "+choice.reason;
+            candidate.goal=candidate.path.back(); candidate.laneChangeAfter=seconds_+15; ++candidate.laneChanges; candidate.laneChangeStatus="changing: "+choice.reason;
             for(auto& actor:entities_) if(actor.cooperativeFor==e.id && actor.cooperativeLane!=static_cast<int>(target)) actor.cooperativeUntil=seconds_;
             ++totalLaneChanges_; e=std::move(candidate); break;
         }

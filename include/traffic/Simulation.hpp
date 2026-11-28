@@ -6,6 +6,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <memory>
 
 namespace traffic {
 struct Cell {
@@ -112,8 +113,9 @@ struct StuckVehicleSettings {
 };
 struct GridlockEscapeSettings {
     bool enabled=false;
-    // overlapAfterSeconds is retained for source compatibility, never enables overlap.
+    // Release reservations first, then optionally allow a blocked vehicle through.
     double afterSeconds=15,overlapAfterSeconds=3,speed=1.5;
+    bool allowOverlap=false;
 };
 struct TrafficRecoverySettings {
     bool enabled=true;
@@ -224,6 +226,8 @@ struct Entity {
     double junctionRadius=0,laneChangeAfter=0,junctionEnteredAt=0,junctionRetryAfter=0;
     std::uint64_t laneChanges=0,junctionCrossings=0;
     bool changingLanes=false;
+    bool laneChangesDisabled=false;
+    std::shared_ptr<const Entity> laneChangeOrigin;
     int changingFrom=-1,changingTo=-1;
     Vec2 laneChangeEnd,laneChangeDirection;
     double cooperativeUntil=0,cooperativeSpeedCap=50;
@@ -315,6 +319,11 @@ struct TrafficLightQueueStatus {
     int qualityLine=0; // 1-based highest qualifying line; 0 means none.
     std::vector<QueueDetectorStatus> lines;
 };
+struct NormalTrTiming {
+    bool active=false,guardYellow=false;
+    double epoch=0,guard=0,cycle=0,greenStart=0,green=0,yellow=0;
+    std::array<double,2> trStart{},trDuration{};
+};
 struct TrafficLight {
     Vec2 a,b; // Finite oriented stop line in meters. Only outDirection is controlled.
     double greenSeconds=10,yellowSeconds=2,redSeconds=12,offsetSeconds=0;
@@ -326,10 +335,21 @@ struct TrafficLight {
     std::vector<QueueDetector> queueDetectors; // Order: nearest to farthest upstream.
     Vec2 outDirection; // Controlled travel direction; the reverse direction is always permitted by this light.
     int anchorNode=-1; // Optional road-station node. Permission gates remain separate from destinations.
+    bool completeJunctionOnGreen=false;
+    int completionJunction=-1;
+    Vec2 completionCenter;
+    double completionRadius=12;
+    double trSeconds=0; // Normal-cycle clearance; external controllers own their timers.
+    int trJunction=-1,trGroup=0;
+    bool suspendNormalTr=false; // Runtime only: the density-v1 controller owns timing.
+    NormalTrTiming normalTr;
+    bool externallyControlled=false;
+    LightPhase externalPhase=LightPhase::Red; // Runtime-only hold control; never serialized as manual timing.
     Vec2 controlledDirection() const;
     bool controlsDirection(Vec2 travel) const;
     bool controlsMovement(Vec2 from,Vec2 to) const;
     LightPhase phase(double simulationSeconds) const;
+    double trRemaining(double simulationSeconds) const;
 };
 class Simulation {
     friend struct JunctionPriorityTestAccess;
@@ -364,6 +384,8 @@ public:
     const VehicleProfile& profile(VehicleKind kind) const;
     void resampleMotion();
     bool setEntityMotion(std::uint64_t id,double desiredSpeed,double acceleration);
+    // Manual deletion finishes the selected active trip without advancing time.
+    bool deleteVehicle(std::uint64_t id);
     bool setEntityMass(std::uint64_t id,double massKg);
     void setTugSettings(TugSettings settings);
     const TugSettings& tugSettings() const { return tugSettings_; }
@@ -401,6 +423,8 @@ public:
     const Map& map() const { return map_; }
     const std::vector<Entity>& entities() const { return entities_; }
     std::uint64_t completed() const { return completed_; }
+    std::uint64_t completedOnGreen() const { return completedOnGreen_; }
+    std::uint64_t manuallyCompleted() const { return manuallyCompleted_; }
     std::uint64_t ticks() const { return ticks_; }
     std::uint64_t replans() const { return replans_; }
     std::uint64_t recoveries() const { return recoveries_; }
@@ -447,6 +471,15 @@ public:
     std::uint64_t destinationRefreshes() const { return destinationRefreshes_; }
     std::uint64_t destinationRefreshAttempts() const { return destinationRefreshAttempts_; }
 private:
+    void configureNormalTr(std::vector<TrafficLight>& lights);
+    struct NormalTrCycle {int junction=-1;std::string signature;double epoch=0,guard=0;std::vector<std::pair<std::uint64_t,bool>> guardYellow;};
+    std::vector<NormalTrCycle> normalTrCycles_;
+    std::vector<std::uint64_t> greenJunctionCompletionVehicles();
+    void completeGreenJunctions();
+    struct GreenCompletionState {std::uint64_t id;LightPhase phase;bool enabled,complete;int junction;};
+    std::vector<GreenCompletionState> greenCompletionStates_;
+    std::uint64_t completedOnGreen_=0;
+    std::uint64_t manuallyCompleted_=0;
     double sample(Gaussian distribution,double minimum,double maximum);
     void sampleMotion(Entity& entity);
     bool fitsLaneRoute(const Footprint&,const Entity&) const;
@@ -490,6 +523,7 @@ private:
     void updateSublanes();
     bool advanceNetworkStage(Entity& entity);
     void updateLaneChanges();
+    bool abortStoppedLaneChange(Entity& entity);
     bool junctionAdmission(const Entity& entity,int link,const std::vector<Vec2>& movement) const;
     bool reserveManeuver(Entity& entity,const PathManeuver& maneuver);
     bool beginRecovery(Entity& entity,bool shortYield=false);
